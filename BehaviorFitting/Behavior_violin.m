@@ -1,0 +1,231 @@
+clear
+load("P:\Codes\Matlab\offlineAnalysis\3DMotionAnalysis\Stimulation\John_analysis_try\BehaviorFitting\unit_table_behavModel.mat")
+%% Check population results
+Bias_ori = NaN(size(unit_table, 1), 4);
+B2_biasOnly = NaN(size(unit_table, 1), 4);
+B2_full = NaN(size(unit_table, 1), 4);
+p_fVSn = NaN(size(unit_table, 1), 4);
+p_bVSn = NaN(size(unit_table, 1), 4);
+bias_fVSn = NaN(size(unit_table, 1), 4);
+
+B2 = [];
+B3 = [];
+g = [];
+for i_rec = 1:size(unit_table, 1)
+    Bias_ori(i_rec, :) = unit_table.Delta_bias{i_rec};
+    p_fVSn(i_rec, :) = unit_table.Behav_fullVSnull_p{i_rec};
+    p_bVSn(i_rec, :) = unit_table.Behav_biasOnlyVSnull_p{i_rec};
+    B2_biasOnly_rec = NaN(1, 4);
+    B2_full_rec = NaN(1, 4);
+    B3_full_rec = NaN(1, 4);
+    for i_cue = 1:4
+        b0_f = unit_table.Behav_mdl_full{i_rec}{i_cue}.Coefficients{1, 'Estimate'};
+        b1_f = unit_table.Behav_mdl_full{i_rec}{i_cue}.Coefficients{'coh', 'Estimate'};
+        b2_f = unit_table.Behav_mdl_full{i_rec}{i_cue}.Coefficients{'s', 'Estimate'};
+        b3_f = unit_table.Behav_mdl_full{i_rec}{i_cue}.Coefficients{'coh:s', 'Estimate'};
+        c_n = -b0_f/b1_f; 
+        c_s = -(b0_f + b2_f)/(b1_f + b3_f);
+        bias_fVSn(i_rec, i_cue) = c_s - c_n;
+        B2_biasOnly_rec(i_cue) = unit_table.Behav_mdl_BiasOnly{i_rec}{i_cue}.Coefficients{'s', 'Estimate'};
+        B2_full_rec(i_cue) = unit_table.Behav_mdl_full{i_rec}{i_cue}.Coefficients{'s', 'Estimate'};
+        B3_full_rec(i_cue) = unit_table.Behav_mdl_full{i_rec}{i_cue}.Coefficients{'coh:s', 'Estimate'};
+    end
+    B2_biasOnly(i_rec, :) = B2_biasOnly_rec;
+    B2_full(i_rec, :) = B2_full_rec;
+    if unit_table.p_AI{i_rec}(2) < 0.05 && unit_table.p_AI{i_rec}(3) < 0.05
+        B2 = [B2; B2_full_rec];
+        B3 = [B3; B3_full_rec];
+        if strcmp(unit_table.ROI{i_rec}, 'MT')
+            if unit_table.Z3D_v_Z2D{i_rec} < 0
+                g = [g; 1];
+                if max(abs(unit_table.Delta_bias{i_rec})) < 0.15
+                    disp('Low bias')
+                    disp(i_rec)
+                elseif max(abs(unit_table.Delta_bias{i_rec})) > 1.5
+                    disp('High bias')
+                    disp(i_rec)
+                end
+
+            elseif unit_table.Z3D_v_Z2D{i_rec} > 0
+                g = [g; 2];
+            end
+        elseif strcmp(unit_table.ROI{i_rec}, 'FST')
+            if unit_table.Z3D_v_Z2D{i_rec} < 0
+                g = [g; 3];
+            elseif unit_table.Z3D_v_Z2D{i_rec} > 0
+                g = [g; 4];
+            end
+        end
+    end
+
+end
+
+%%
+figure()
+B2_Comb = [abs(B2(:, 1)), g];
+violinPlot_KW_Nx2(B2_Comb)
+
+figure()
+B2_Left = [abs(B2(:, 2)), g];
+violinPlot_KW_Nx2(B2_Left)
+
+figure()
+B2_Right = [abs(B2(:, 3)), g];
+violinPlot_KW_Nx2(B2_Right)
+
+figure()
+B2_Stereo = [abs(B2(:, 4)), g];
+violinPlot_KW_Nx2(B2_Stereo)
+%%
+figure()
+B3_Comb = [abs(B3(:, 1)), g];
+violinPlot_KW_Nx2(B3_Comb)
+
+figure()
+B3_Left = [abs(B3(:, 2)), g];
+violinPlot_KW_Nx2(B3_Left)
+
+figure()
+B3_Right = [abs(B3(:, 3)), g];
+violinPlot_KW_Nx2(B3_Right)
+
+figure()
+B3_Stereo = [abs(B3(:, 4)), g];
+violinPlot_KW_Nx2(B3_Stereo)
+function out = violinPlot_KW_Nx2(data, varargin)
+%VIOLINPLOT_KW_NX2  Violin plot + Kruskal-Wallis + pairwise post-hoc tests.
+%   data(:,1) = values
+%   data(:,2) = group labels (e.g., 1..4)
+
+p = inputParser;
+p.addRequired('data', @(x) isnumeric(x) && size(x,2)==2);
+p.addParameter('GroupOrder', [], @(x) isnumeric(x) && isvector(x));
+p.addParameter('Bandwidth', [], @(x) isempty(x) || (isscalar(x) && x>0));
+p.addParameter('ViolinWidth', 0.35, @(x) isscalar(x) && x>0);
+
+% points
+p.addParameter('PointJitter', 0.10, @(x) isscalar(x) && x>=0);
+p.addParameter('PointSize', 10, @(x) isscalar(x) && x>0);
+p.addParameter('PointAlpha', 0.45, @(x) isscalar(x) && x>=0 && x<=1);
+
+% summary lines
+p.addParameter('ShowMedian', true, @(x) islogical(x) || isnumeric(x));
+p.addParameter('ShowIQR', true, @(x) islogical(x) || isnumeric(x));
+
+% stats options
+p.addParameter('Alpha', 0.05, @(x) isscalar(x) && x>0 && x<1);
+p.addParameter('CType', 'dunn-sidak', @(s) ischar(s) || isstring(s));
+p.parse(data, varargin{:});
+opts = p.Results;
+
+vals = data(:,1);
+grp  = data(:,2);
+
+ok = isfinite(vals) & isfinite(grp);
+vals = vals(ok);
+grp  = grp(ok);
+
+if isempty(opts.GroupOrder)
+    groups = unique(grp(:))';
+else
+    groups = opts.GroupOrder(:)';
+end
+
+%% ---- Plot violins + points
+ax = gca; hold(ax,'on');
+
+h = struct();
+h.violin = gobjects(numel(groups),1);
+h.median = gobjects(numel(groups),1);
+h.iqr    = gobjects(numel(groups),1);
+h.points = gobjects(numel(groups),1);
+
+for i = 1:numel(groups)
+    g = groups(i);
+    y = vals(grp == g);
+    y = y(:);
+    if isempty(y), continue; end
+
+    if numel(y) >= 2
+        if isempty(opts.Bandwidth)
+            [f, xi] = ksdensity(y);
+        else
+            [f, xi] = ksdensity(y, 'Bandwidth', opts.Bandwidth);
+        end
+    else
+        xi = y; f = 1;
+    end
+
+    f = f / max(f);
+    w = opts.ViolinWidth * f;
+
+    x0 = i;
+    X = [x0 - w, fliplr(x0 + w)];
+    Y = [xi,     fliplr(xi)];
+
+    h.violin(i) = fill(ax, X, Y, [0.7 0.7 0.7], ...
+        'EdgeColor', [0.2 0.2 0.2], 'LineWidth', 1, 'FaceAlpha', 0.6);
+
+    q1  = prctile(y, 25);
+    q3  = prctile(y, 75);
+    med = median(y);
+
+    if opts.ShowIQR
+        h.iqr(i) = plot(ax, [x0 x0], [q1 q3], 'k-', 'LineWidth', 3);
+    end
+    if opts.ShowMedian
+        h.median(i) = plot(ax, [x0-0.12 x0+0.12], [med med], 'k-', 'LineWidth', 2);
+    end
+
+    jitter = (rand(size(y)) - 0.5) * 2 * opts.PointJitter;
+    h.points(i) = scatter(ax, x0 + jitter, y, opts.PointSize, 'filled', ...
+        'MarkerFaceAlpha', opts.PointAlpha, 'MarkerEdgeAlpha', opts.PointAlpha);
+end
+
+set(ax, 'XLim', [0.5, numel(groups)+0.5], 'XTick', 1:numel(groups));
+set(ax, 'XTickLabel', arrayfun(@(g) sprintf('%d', g), groups, 'UniformOutput', false));
+box(ax,'on');
+xlabel(ax,'Group'); ylabel(ax,'Value');
+
+%% ---- Kruskal-Wallis + pairwise comparisons
+% Map original labels -> 1..K to align with x-axis ordering
+grpMapped = nan(size(grp));
+for i = 1:numel(groups)
+    grpMapped(grp == groups(i)) = i;
+end
+% overall KW (suppress plot)
+[kw_p, kw_tbl, kw_stats] = kruskalwallis(vals, grpMapped, 'off');
+
+% pairwise post-hoc: columns [i j low diff high p]
+c = multcompare(kw_stats, 'CType', char(opts.CType), 'Alpha', opts.Alpha, 'Display', 'off');
+
+if isempty(c)
+    pairwiseTable = table(); % e.g., if only 1 group present
+else
+    n = size(c,1);
+
+    g1idx = c(:,1);
+    g2idx = c(:,2);
+
+    % Build the table with correct height in one shot
+    pairwiseTable = table( ...
+        g1idx, g2idx, ...
+        groups(g1idx)', groups(g2idx)', ...
+        c(:,4), c(:,3), c(:,5), c(:,6), ...
+        'VariableNames', {'group1_idx','group2_idx','group1','group2','diff','ci_low','ci_high','p_adj'} ...
+    );
+
+    pairwiseTable.sig = pairwiseTable.p_adj < opts.Alpha;
+    pairwiseTable = sortrows(pairwiseTable, "p_adj", "ascend");
+end
+
+title(ax, sprintf('Kruskal-Wallis p = %.3g', kw_p));
+hold(ax,'off');
+
+out = struct();
+out.kw_p          = kw_p;
+out.kw_tbl        = kw_tbl;
+out.kw_stats      = kw_stats;
+out.pairwiseTable = pairwiseTable;
+out.plotHandles   = h;
+end

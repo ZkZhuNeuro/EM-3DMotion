@@ -1,0 +1,398 @@
+clear;
+load('UnitTable_updating.mat');
+
+load("P:\Codes\Matlab\offlineAnalysis\3DMotionAnalysis\Stimulation\John_analysis_try\BehaviorFitting\BehaviorData_Clay.mat")
+Clay_nonStim = BehaviorData_nonStim_pFit_all;
+Clay_Stim = BehaviorData_Stim_pFit_all;
+
+load("P:\Codes\Matlab\offlineAnalysis\3DMotionAnalysis\Stimulation\John_analysis_try\BehaviorFitting\BehaviorData_Jim.mat")
+Jim_nonStim = BehaviorData_nonStim_pFit_all;
+Jim_Stim = BehaviorData_Stim_pFit_all;
+
+Data_N = [Jim_nonStim; Clay_nonStim];
+Data_S = [Jim_Stim;  Clay_Stim];
+
+clear BehaviorData_nonStim_pFit_all BehaviorData_Stim_pFit_all Jim_nonStim Clay_nonStim Jim_Stim Clay_Stim
+
+% Number of bootstrap fits per recording/cue table.
+n_boot = 1000;
+
+%%
+if ~ismember('Behav_mdl_full', unit_table.Properties.VariableNames)
+    unit_table.Behav_mdl_full = cell(height(unit_table), 1);
+end
+if ~ismember('Behav_mdl_null', unit_table.Properties.VariableNames)
+    unit_table.Behav_mdl_null = cell(height(unit_table), 1);
+end
+if ~ismember('Behav_fullVSnull_p', unit_table.Properties.VariableNames)
+    unit_table.Behav_fullVSnull_p = cell(height(unit_table), 1);
+end
+if ~ismember('Behav_boot_betas', unit_table.Properties.VariableNames)
+    unit_table.Behav_boot_betas = cell(height(unit_table), 1);
+end
+if ~ismember('Behav_boot_validN', unit_table.Properties.VariableNames)
+    unit_table.Behav_boot_validN = cell(height(unit_table), 1);
+end
+
+for i_rec = 1:size(unit_table, 1)
+    for i_cue = 1:size(Data_N{i_rec}, 2)
+        Behav_N = Data_N{i_rec}(i_cue).data;
+        Behav_S = Data_S{i_rec}(i_cue).data;
+
+        % Build the table for the GLM model.
+        coh = [Behav_N(:, 1); Behav_S(:, 1)];
+        y   = [Behav_N(:, 2); Behav_S(:, 2)];
+        n   = [Behav_N(:, 3); Behav_S(:, 3)];
+        s   = [zeros(size(Behav_N, 1), 1); ones(size(Behav_S, 1), 1)];
+
+        tbl = table(coh, s, y, n);
+
+        % Full model: coh + stim + coh*stim
+        mdl_full = fitglm(tbl, 'y ~ coh + s + coh:s', ...
+            'Distribution', 'binomial', 'BinomialSize', tbl.n);
+
+        % Null model: same curve (no stim terms)
+        mdl_null = fitglm(tbl, 'y ~ coh', ...
+            'Distribution', 'binomial', 'BinomialSize', tbl.n);
+
+        % Likelihood-ratio (deviance) test: full vs null
+        D_fVSn = mdl_null.Deviance - mdl_full.Deviance;
+        df_fVSn = mdl_null.DFE - mdl_full.DFE;
+        p_fVSn = 1 - chi2cdf(D_fVSn, df_fVSn);
+
+        unit_table.Behav_mdl_full{i_rec}{i_cue} = mdl_full;
+        unit_table.Behav_mdl_null{i_rec}{i_cue} = mdl_null;
+        unit_table.Behav_fullVSnull_p{i_rec}(i_cue) = p_fVSn;
+
+        % Parametric bootstrap from the observed proportion in each row.
+        p_obs = zeros(size(tbl.y));
+        valid_rows = tbl.n > 0 & ~isnan(tbl.y) & ~isnan(tbl.n);
+        p_obs(valid_rows) = tbl.y(valid_rows) ./ tbl.n(valid_rows);
+        p_obs = min(max(p_obs, 0), 1);
+
+        boot_betas = nan(n_boot, 4);
+
+        for i_boot = 1:n_boot
+            tbl_boot = tbl;
+            tbl_boot.y(valid_rows) = binornd(tbl.n(valid_rows), p_obs(valid_rows));
+
+            try
+                mdl_boot = fitglm(tbl_boot, 'y ~ coh + s + coh:s', ...
+                    'Distribution', 'binomial', 'BinomialSize', tbl_boot.n);
+
+                beta_hat = mdl_boot.Coefficients.Estimate;
+                boot_betas(i_boot, 1:numel(beta_hat)) = beta_hat(:)';
+            catch
+                % Leave this row as NaN if the bootstrap fit fails to converge.
+            end
+        end
+
+        unit_table.Behav_boot_betas{i_rec}{i_cue} = boot_betas;
+        unit_table.Behav_boot_validN{i_rec}(i_cue) = sum(all(~isnan(boot_betas), 2));
+    end
+end
+
+%%
+load("P:\Codes\Matlab\offlineAnalysis\3DMotionAnalysis\Stimulation\John_analysis_try\BehaviorFitting\unit_table_GLMAssess.mat")
+unit_table_GLM = unit_table;
+load C:\EM\BehaviorFitting\unit_table_lapseHardCap_06.mat
+unit_table_psig = unit_table;
+clear unit_table
+%%
+b2 = NaN(size(unit_table_GLM, 1), 4);
+b2_boots = NaN(size(unit_table_GLM, 1), 4, n_boot);
+Bias = NaN(size(unit_table_GLM, 1), 4);
+Bias_psig = NaN(size(unit_table_GLM, 1), 4);
+Bias_boot = NaN(size(unit_table_GLM, 1), 4, n_boot);
+dProp = NaN(size(unit_table_GLM, 1), 4);
+dProp_boot = NaN(size(unit_table_GLM, 1), 4, n_boot);
+
+for i_rec = 1:size(unit_table_GLM, 1)
+    for i_cue = 1:4
+        betas = unit_table_GLM.Behav_mdl_full{i_rec}{i_cue}.Coefficients{:, 1};
+        betas_boot = unit_table_GLM.Behav_boot_betas{i_rec}{i_cue};
+        b2(i_rec, i_cue) = betas(3);
+        b2_boots(i_rec, i_cue, :) = betas_boot(:, 3);
+
+        bias = (-betas(1) / betas(2)) + (betas(1) + betas(3)) / (betas(2) + betas(4));
+        Bias(i_rec, i_cue) = bias;
+        bias_boot = (-betas_boot(:, 1) ./ betas_boot(:, 2)) + (betas_boot(:, 1) + betas_boot(:, 3)) ./ (betas_boot(:, 2) + betas_boot(:, 4));
+        Bias_boot(i_rec, i_cue, :) = bias_boot;
+
+        tbl0 = table([0; 0], [0; 1], 'VariableNames', {'coh','s'});
+        p0 = predict(unit_table_GLM.Behav_mdl_full{i_rec}{i_cue}, tbl0);
+        dProp(i_rec, i_cue) = p0(2) - p0(1);
+        dProp_boot(i_rec, i_cue, :) = 1./(1 + exp(betas_boot(:, 1) - betas_boot(:, 3))) - 1./(1 + exp(betas_boot(:, 1)));
+
+    end
+    Bias_psig(i_rec, :) = unit_table_psig.DeltaBias_lapseCap{i_rec};
+end
+
+%% Bootstrap std for each recording x cue
+% size = [nRec x 4]
+std_b2   = std(b2_boots, 0, 3, 'omitnan');
+std_Bias = std(Bias_boot, 0, 3, 'omitnan');
+std_dProp = std(dProp_boot, 0, 3, 'omitnan');
+
+% Optional: also keep median bootstrap estimates if useful
+median_b2_boot    = median(b2_boots, 3, 'omitnan');
+median_Bias_boot  = median(Bias_boot, 3, 'omitnan');
+median_dProp_boot = median(dProp_boot, 3, 'omitnan');
+
+%%
+figure;
+scatter(b2, median_b2_boot)
+figure;
+scatter(Bias, median_Bias_boot)
+figure;
+scatter(dProp, median_dProp_boot)
+%% If you want coefficient of variation-like normalized variability
+% Be careful when denominator is near zero.
+cv_b2    = std_b2 ./ abs(b2);
+cv_Bias  = std_Bias ./ abs(Bias);
+cv_dProp = std_dProp ./ abs(dProp);
+
+% Optional: set extreme values to NaN when denominator is too small
+cv_b2(abs(b2) < 1e-6) = NaN;
+cv_Bias(abs(Bias) < 1e-6) = NaN;
+cv_dProp(abs(dProp) < 1e-6) = NaN;
+
+%%
+% theta_boot: nRec x 4 x nBoot
+CIwidth_b2 = NaN(size(b2_boots,1), size(b2_boots,2));
+
+for i_rec = 1:size(b2_boots,1)
+    for i_cue = 1:size(b2_boots,2)
+        x = squeeze(b2_boots(i_rec, i_cue, :));
+        x = x(~isnan(x));
+        if ~isempty(x)
+            q = prctile(x, [2.5 97.5]);
+            CIwidth_b2(i_rec, i_cue) = q(2) - q(1);
+        end
+    end
+end
+
+normCIwidth_b2 = CIwidth_b2 ./ median(CIwidth_b2(:), 'omitnan');
+
+%%
+% theta_boot: nRec x 4 x nBoot
+CIwidth_Bias = NaN(size(Bias_boot,1), size(Bias_boot,2));
+
+for i_rec = 1:size(Bias_boot,1)
+    for i_cue = 1:size(Bias_boot,2)
+        x = squeeze(Bias_boot(i_rec, i_cue, :));
+        x = x(~isnan(x));
+        if ~isempty(x)
+            q = prctile(x, [2.5 97.5]);
+            CIwidth_Bias(i_rec, i_cue) = q(2) - q(1);
+        end
+    end
+end
+
+normCIwidth_Bias = CIwidth_Bias ./ median(CIwidth_Bias(:), 'omitnan');
+
+%%
+% theta_boot: nRec x 4 x nBoot
+CIwidth_dProp = NaN(size(dProp_boot,1), size(dProp_boot,2));
+
+for i_rec = 1:size(dProp_boot,1)
+    for i_cue = 1:size(dProp_boot,2)
+        x = squeeze(dProp_boot(i_rec, i_cue, :));
+        x = x(~isnan(x));
+        if ~isempty(x)
+            q = prctile(x, [2.5 97.5]);
+            CIwidth_dProp(i_rec, i_cue) = q(2) - q(1);
+        end
+    end
+end
+
+normCIwidth_dProp = CIwidth_dProp ./ median(CIwidth_dProp(:), 'omitnan');
+
+%% Histogram of pooled std across all recordings and cues
+cue_names = {'Comb', 'Left', 'Right', 'Stereo'};
+
+%%    
+figure;
+for i_cue = 1:4
+
+    
+    subplot(1,4,i_cue); hold on
+    histogram(CIwidth_Bias(:, i_cue), 20);
+    xlabel('Bootstrap CI');
+    ylabel('Count');
+    title([cue_names{i_cue} ' - CI']);
+    axis square
+
+
+    sgtitle(['Bootstrap variability: ' cue_names{i_cue}]);
+end
+
+%% One figure per cue, with separate histograms for b2 / Bias / dProp
+for i_cue = 1:4
+    figure;
+    
+    subplot(1,3,1); hold on
+    histogram(std_b2(:, i_cue), 20);
+    xlabel('Bootstrap SD of b2');
+    ylabel('Count');
+    title([cue_names{i_cue} ' - b2']);
+    axis square
+
+    subplot(1,3,2); hold on
+    histogram(std_Bias(:, i_cue), 20);
+    xlabel('Bootstrap SD of Bias');
+    ylabel('Count');
+    title([cue_names{i_cue} ' - Bias']);
+    axis square
+
+    subplot(1,3,3); hold on
+    histogram(std_dProp(:, i_cue), 20);
+    xlabel('Bootstrap SD of dProp');
+    ylabel('Count');
+    title([cue_names{i_cue} ' - dProp']);
+    axis square
+
+    sgtitle(['Bootstrap variability: ' cue_names{i_cue}]);
+end
+
+%% Cue-specific histograms
+cue_names = {'Comb', 'Left', 'Right', 'Stereo'};
+
+figure;
+for i_cue = 1:4
+    subplot(2,2,i_cue); hold on
+    histogram(std_b2(:, i_cue), 20);
+    xlabel('Bootstrap SD of b2');
+    ylabel('Count');
+    title(cue_names{i_cue});
+    axis square
+end
+sgtitle('Cue-specific bootstrap SD distributions: b2');
+
+figure;
+for i_cue = 1:4
+    subplot(2,2,i_cue); hold on
+    histogram(std_Bias(:, i_cue), 20);
+    xlabel('Bootstrap SD of Bias');
+    ylabel('Count');
+    title(cue_names{i_cue});
+    axis square
+end
+sgtitle('Cue-specific bootstrap SD distributions: Bias');
+
+figure;
+for i_cue = 1:4
+    subplot(2,2,i_cue); hold on
+    histogram(std_dProp(:, i_cue), 20);
+    xlabel('Bootstrap SD of dProp');
+    ylabel('Count');
+    title(cue_names{i_cue});
+    axis square
+end
+sgtitle('Cue-specific bootstrap SD distributions: dProp');
+
+
+
+
+
+
+
+
+
+
+
+%%
+figure; hold on
+
+for i_cue = 1:4
+    x = b2(:, i_cue);                     % observed b2 for each recording
+    y = squeeze(b2_boots(:, i_cue, :));  % nRec x n_boot
+
+    % repeat each observed b2 across its 1000 bootstrap samples
+    x_plot = repmat(x, 1, size(y, 2));
+
+    % remove NaNs from failed bootstrap fits
+    valid = ~isnan(x_plot) & ~isnan(y);
+
+    scatter(x_plot(valid), y(valid), 10, 'filled', ...
+        'MarkerFaceAlpha', 0.3, 'MarkerEdgeAlpha', 0.3);
+end
+
+plot(xlim, xlim, 'k--')   % identity line
+xlabel('Observed b2')
+ylabel('Bootstrap b2')
+legend({'Cue 1','Cue 2','Cue 3','Cue 4'}, 'Location', 'best')
+axis square
+box on
+
+%%
+figure; hold on
+
+for i_cue = 1:4
+    x = Bias_psig(:, i_cue);                     % observed b2 for each recording
+    y = squeeze(Bias_boot(:, i_cue, :));  % nRec x n_boot
+
+    % repeat each observed b2 across its 1000 bootstrap samples
+    x_plot = repmat(x, 1, size(y, 2));
+
+    % remove NaNs from failed bootstrap fits
+    valid = ~isnan(x_plot) & ~isnan(y);
+
+    scatter(x_plot(valid), y(valid), 10, 'filled', ...
+        'MarkerFaceAlpha', 0.3, 'MarkerEdgeAlpha', 0.3);
+end
+
+plot(xlim, xlim, 'k--')   % identity line
+xlabel('Observed b2')
+ylabel('Bootstrap b2')
+legend({'Cue 1','Cue 2','Cue 3','Cue 4'}, 'Location', 'best')
+axis square
+box on
+
+%%
+figure; hold on
+
+for i_cue = 1:4
+    x = Bias(:, i_cue);                     % observed b2 for each recording
+    y = squeeze(Bias_boot(:, i_cue, :));  % nRec x n_boot
+
+    % repeat each observed b2 across its 1000 bootstrap samples
+    x_plot = repmat(x, 1, size(y, 2));
+
+    % remove NaNs from failed bootstrap fits
+    valid = ~isnan(x_plot) & ~isnan(y);
+
+    scatter(x_plot(valid), y(valid), 10, 'filled', ...
+        'MarkerFaceAlpha', 0.3, 'MarkerEdgeAlpha', 0.3);
+end
+
+plot(xlim, xlim, 'k--')   % identity line
+xlabel('Observed b2')
+ylabel('Bootstrap b2')
+legend({'Cue 1','Cue 2','Cue 3','Cue 4'}, 'Location', 'best')
+axis square
+box on
+
+%%
+figure; hold on
+
+for i_cue = 1:4
+    x = dProp(:, i_cue);                     % observed b2 for each recording
+    y = squeeze(dProp_boot(:, i_cue, :));  % nRec x n_boot
+
+    % repeat each observed b2 across its 1000 bootstrap samples
+    x_plot = repmat(x, 1, size(y, 2));
+
+    % remove NaNs from failed bootstrap fits
+    valid = ~isnan(x_plot) & ~isnan(y);
+
+    scatter(x_plot(valid), y(valid), 10, 'filled', ...
+        'MarkerFaceAlpha', 0.3, 'MarkerEdgeAlpha', 0.3);
+end
+
+plot(xlim, xlim, 'k--')   % identity line
+xlabel('Observed b2')
+ylabel('Bootstrap b2')
+legend({'Cue 1','Cue 2','Cue 3','Cue 4'}, 'Location', 'best')
+axis square
+box on

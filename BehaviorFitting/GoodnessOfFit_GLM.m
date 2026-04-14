@@ -1,0 +1,750 @@
+clear;
+reanalysis = 0;
+individualPlot = 1;
+
+%% load raw behavior data
+load("P:\Codes\Matlab\offlineAnalysis\3DMotionAnalysis\Stimulation\John_analysis_try\BehaviorFitting\BehaviorData_Clay.mat")
+Clay_nonStim = BehaviorData_nonStim_pFit_all;
+Clay_Stim = BehaviorData_Stim_pFit_all;
+
+load("P:\Codes\Matlab\offlineAnalysis\3DMotionAnalysis\Stimulation\John_analysis_try\BehaviorFitting\BehaviorData_Jim.mat")
+Jim_nonStim = BehaviorData_nonStim_pFit_all;
+Jim_Stim = BehaviorData_Stim_pFit_all;
+
+Data_N = [Jim_nonStim; Clay_nonStim];
+Data_S = [Jim_Stim;  Clay_Stim];
+
+clear BehaviorData_nonStim_pFit_all BehaviorData_Stim_pFit_all Jim_nonStim Clay_nonStim Jim_Stim Clay_Stim
+
+n_boot = 1000;
+
+%%
+if reanalysis == 1
+    load('UnitTable_updating.mat');
+
+    %% add fields if missing
+    if ~ismember('Behav_mdl_full', unit_table.Properties.VariableNames)
+        unit_table.Behav_mdl_full = cell(height(unit_table), 1);
+    end
+    if ~ismember('Behav_mdl_null', unit_table.Properties.VariableNames)
+        unit_table.Behav_mdl_null = cell(height(unit_table), 1);
+    end
+    if ~ismember('Behav_fullVSnull_p', unit_table.Properties.VariableNames)
+        unit_table.Behav_fullVSnull_p = cell(height(unit_table), 1);
+    end
+    if ~ismember('Behav_boot_betas', unit_table.Properties.VariableNames)
+        unit_table.Behav_boot_betas = cell(height(unit_table), 1);
+    end
+    if ~ismember('Behav_boot_validN', unit_table.Properties.VariableNames)
+        unit_table.Behav_boot_validN = cell(height(unit_table), 1);
+    end
+
+    if ~ismember('Behav_mdl_N', unit_table.Properties.VariableNames)
+        unit_table.Behav_mdl_N = cell(height(unit_table), 1);
+    end
+    if ~ismember('Behav_mdl_S', unit_table.Properties.VariableNames)
+        unit_table.Behav_mdl_S = cell(height(unit_table), 1);
+    end
+    if ~ismember('Behav_N_chi2', unit_table.Properties.VariableNames)
+        unit_table.Behav_N_chi2 = cell(height(unit_table), 1);
+    end
+    if ~ismember('Behav_N_chi2_df', unit_table.Properties.VariableNames)
+        unit_table.Behav_N_chi2_df = cell(height(unit_table), 1);
+    end
+    if ~ismember('Behav_N_chi2_p', unit_table.Properties.VariableNames)
+        unit_table.Behav_N_chi2_p = cell(height(unit_table), 1);
+    end
+    if ~ismember('Behav_S_chi2', unit_table.Properties.VariableNames)
+        unit_table.Behav_S_chi2 = cell(height(unit_table), 1);
+    end
+    if ~ismember('Behav_S_chi2_df', unit_table.Properties.VariableNames)
+        unit_table.Behav_S_chi2_df = cell(height(unit_table), 1);
+    end
+    if ~ismember('Behav_S_chi2_p', unit_table.Properties.VariableNames)
+        unit_table.Behav_S_chi2_p = cell(height(unit_table), 1);
+    end
+
+    for i_rec = 1:size(unit_table, 1)
+        n_cues_this_rec = size(Data_N{i_rec}, 2);
+
+        if isempty(unit_table.Behav_mdl_full{i_rec})
+            unit_table.Behav_mdl_full{i_rec} = cell(1, n_cues_this_rec);
+        end
+        if isempty(unit_table.Behav_mdl_null{i_rec})
+            unit_table.Behav_mdl_null{i_rec} = cell(1, n_cues_this_rec);
+        end
+        if isempty(unit_table.Behav_mdl_N{i_rec})
+            unit_table.Behav_mdl_N{i_rec} = cell(1, n_cues_this_rec);
+        end
+        if isempty(unit_table.Behav_mdl_S{i_rec})
+            unit_table.Behav_mdl_S{i_rec} = cell(1, n_cues_this_rec);
+        end
+        if isempty(unit_table.Behav_boot_betas{i_rec})
+            unit_table.Behav_boot_betas{i_rec} = cell(1, n_cues_this_rec);
+        end
+
+        for i_cue = 1:n_cues_this_rec
+            Behav_N = Data_N{i_rec}(i_cue).data;
+            Behav_S = Data_S{i_rec}(i_cue).data;
+
+            % -------- Combined table for full/null comparison --------
+            coh = [Behav_N(:, 1); Behav_S(:, 1)];
+            y   = [Behav_N(:, 2); Behav_S(:, 2)];
+            n   = [Behav_N(:, 3); Behav_S(:, 3)];
+            s   = [zeros(size(Behav_N, 1), 1); ones(size(Behav_S, 1), 1)];
+
+            tbl = table(coh, s, y, n);
+            valid = tbl.n > 0 & tbl.coh ~= 0 & ...
+                ~isnan(tbl.coh) & ~isnan(tbl.y) & ~isnan(tbl.n);
+            tbl = tbl(valid, :);
+
+            if height(tbl) < 4
+                unit_table.Behav_mdl_full{i_rec}{i_cue} = [];
+                unit_table.Behav_mdl_null{i_rec}{i_cue} = [];
+                unit_table.Behav_fullVSnull_p{i_rec}(i_cue) = NaN;
+                unit_table.Behav_boot_betas{i_rec}{i_cue} = nan(n_boot, 4);
+                unit_table.Behav_boot_validN{i_rec}(i_cue) = 0;
+            else
+                mdl_full = fitglm(tbl, 'y ~ coh + s + coh:s', ...
+                    'Distribution', 'binomial', 'BinomialSize', tbl.n);
+
+                mdl_null = fitglm(tbl, 'y ~ coh', ...
+                    'Distribution', 'binomial', 'BinomialSize', tbl.n);
+
+                D_fVSn = mdl_null.Deviance - mdl_full.Deviance;
+                df_fVSn = mdl_null.DFE - mdl_full.DFE;
+                p_fVSn = 1 - chi2cdf(D_fVSn, df_fVSn);
+
+                unit_table.Behav_mdl_full{i_rec}{i_cue} = mdl_full;
+                unit_table.Behav_mdl_null{i_rec}{i_cue} = mdl_null;
+                unit_table.Behav_fullVSnull_p{i_rec}(i_cue) = p_fVSn;
+
+                % -------- Bootstrap on combined model --------
+                p_obs = zeros(size(tbl.y));
+                valid_rows = tbl.n > 0 & ~isnan(tbl.y) & ~isnan(tbl.n);
+                p_obs(valid_rows) = tbl.y(valid_rows) ./ tbl.n(valid_rows);
+                p_obs = min(max(p_obs, 0), 1);
+
+                boot_betas = nan(n_boot, 4);
+
+                for i_boot = 1:n_boot
+                    tbl_boot = tbl;
+                    tbl_boot.y(valid_rows) = binornd(tbl.n(valid_rows), p_obs(valid_rows));
+
+                    try
+                        mdl_boot = fitglm(tbl_boot, 'y ~ coh + s + coh:s', ...
+                            'Distribution', 'binomial', 'BinomialSize', tbl_boot.n);
+
+                        beta_hat = mdl_boot.Coefficients.Estimate;
+                        boot_betas(i_boot, 1:numel(beta_hat)) = beta_hat(:)';
+                    catch
+                    end
+                end
+
+                unit_table.Behav_boot_betas{i_rec}{i_cue} = boot_betas;
+                unit_table.Behav_boot_validN{i_rec}(i_cue) = sum(all(~isnan(boot_betas), 2));
+            end
+
+            % -------- Pearson GOF for N --------
+            tbl_N = table(Behav_N(:,1), Behav_N(:,2), Behav_N(:,3), ...
+                'VariableNames', {'coh','y','n'});
+            valid_N = tbl_N.n > 0 & tbl_N.coh ~= 0 & ...
+                ~isnan(tbl_N.coh) & ~isnan(tbl_N.y) & ~isnan(tbl_N.n);
+            tbl_N = tbl_N(valid_N, :);
+
+            if height(tbl_N) >= 3
+                mdl_N = fitglm(tbl_N, 'y ~ coh', ...
+                    'Distribution', 'binomial', 'BinomialSize', tbl_N.n);
+                [chi2_N, df_N, p_N] = pearson_gof_binomial(mdl_N, tbl_N);
+            else
+                mdl_N = [];
+                chi2_N = NaN; df_N = NaN; p_N = NaN;
+            end
+
+            unit_table.Behav_mdl_N{i_rec}{i_cue} = mdl_N;
+            unit_table.Behav_N_chi2{i_rec}(i_cue) = chi2_N;
+            unit_table.Behav_N_chi2_df{i_rec}(i_cue) = df_N;
+            unit_table.Behav_N_chi2_p{i_rec}(i_cue) = p_N;
+
+            % -------- Pearson GOF for S --------
+            tbl_S = table(Behav_S(:,1), Behav_S(:,2), Behav_S(:,3), ...
+                'VariableNames', {'coh','y','n'});
+            valid_S = tbl_S.n > 0 & tbl_S.coh ~= 0 & ...
+                ~isnan(tbl_S.coh) & ~isnan(tbl_S.y) & ~isnan(tbl_S.n);
+            tbl_S = tbl_S(valid_S, :);
+
+            if height(tbl_S) >= 3
+                mdl_S = fitglm(tbl_S, 'y ~ coh', ...
+                    'Distribution', 'binomial', 'BinomialSize', tbl_S.n);
+                [chi2_S, df_S, p_S] = pearson_gof_binomial(mdl_S, tbl_S);
+            else
+                mdl_S = [];
+                chi2_S = NaN; df_S = NaN; p_S = NaN;
+            end
+
+            unit_table.Behav_mdl_S{i_rec}{i_cue} = mdl_S;
+            unit_table.Behav_S_chi2{i_rec}(i_cue) = chi2_S;
+            unit_table.Behav_S_chi2_df{i_rec}(i_cue) = df_S;
+            unit_table.Behav_S_chi2_p{i_rec}(i_cue) = p_S;
+        end
+    end
+
+else
+    load("C:\EM\BehaviorFitting\unit_table_GLMAssess.mat")
+end
+
+%%
+function [X2, df, p] = pearson_gof_binomial(mdl, tbl)
+p_hat = predict(mdl, tbl(:, 'coh'));
+p_hat = min(max(p_hat, 1e-6), 1 - 1e-6);
+
+y = tbl.y;
+n = tbl.n;
+
+X2 = sum((y - n .* p_hat).^2 ./ (n .* p_hat .* (1 - p_hat)));
+
+k = numel(mdl.Coefficients.Estimate);
+df = height(tbl) - k;
+
+if df > 0
+    p = 1 - chi2cdf(X2, df);
+else
+    p = NaN;
+end
+end
+
+%%
+%% Bootstrap CI of coh at predicted p = 0.5 from the full model
+n_rec = size(unit_table, 1);
+n_cues = 4;
+
+Behav_coh50_N_hat     = nan(n_rec, n_cues);
+Behav_coh50_S_hat     = nan(n_rec, n_cues);
+Behav_coh50_N_CI_low  = nan(n_rec, n_cues);
+Behav_coh50_N_CI_high = nan(n_rec, n_cues);
+Behav_coh50_S_CI_low  = nan(n_rec, n_cues);
+Behav_coh50_S_CI_high = nan(n_rec, n_cues);
+
+Behav_coh50_N_boot = cell(n_rec, n_cues);
+Behav_coh50_S_boot = cell(n_rec, n_cues);
+
+for i_rec = 1:n_rec
+    if isempty(unit_table.Behav_mdl_full{i_rec}) || isempty(unit_table.Behav_boot_betas{i_rec})
+        continue
+    end
+
+    n_cues_this = min([n_cues, numel(unit_table.Behav_mdl_full{i_rec}), numel(unit_table.Behav_boot_betas{i_rec})]);
+
+    for i_cue = 1:n_cues_this
+        mdl_full = unit_table.Behav_mdl_full{i_rec}{i_cue};
+        boot_betas = unit_table.Behav_boot_betas{i_rec}{i_cue};
+
+        if isempty(mdl_full) || isempty(boot_betas)
+            continue
+        end
+
+        beta_full = mdl_full.Coefficients.Estimate;
+        if numel(beta_full) < 4
+            continue
+        end
+
+        b0 = beta_full(1);
+        b1 = beta_full(2);
+        b2 = beta_full(3);
+        b3 = beta_full(4);
+
+        if abs(b1) > 1e-10
+            Behav_coh50_N_hat(i_rec, i_cue) = -b0 / b1;
+        end
+
+        if abs(b1 + b3) > 1e-10
+            Behav_coh50_S_hat(i_rec, i_cue) = -(b0 + b2) / (b1 + b3);
+        end
+
+        if size(boot_betas, 2) < 4
+            continue
+        end
+
+        valid_boot = all(~isnan(boot_betas(:,1:4)), 2);
+        bb = boot_betas(valid_boot, 1:4);
+
+        if isempty(bb)
+            continue
+        end
+
+        b0b = bb(:,1);
+        b1b = bb(:,2);
+        b2b = bb(:,3);
+        b3b = bb(:,4);
+
+        coh50_N_boot = nan(size(b0b));
+        coh50_S_boot = nan(size(b0b));
+
+        idxN = abs(b1b) > 1e-10;
+        coh50_N_boot(idxN) = -b0b(idxN) ./ b1b(idxN);
+
+        idxS = abs(b1b + b3b) > 1e-10;
+        coh50_S_boot(idxS) = -(b0b(idxS) + b2b(idxS)) ./ (b1b(idxS) + b3b(idxS));
+
+        xN = coh50_N_boot(isfinite(coh50_N_boot));
+        xS = coh50_S_boot(isfinite(coh50_S_boot));
+
+        if ~isempty(xN)
+            CI_N = prctile(xN, [5 95]);
+            Behav_coh50_N_CI_low(i_rec, i_cue)  = CI_N(1);
+            Behav_coh50_N_CI_high(i_rec, i_cue) = CI_N(2);
+        end
+
+        if ~isempty(xS)
+            CI_S = prctile(xS, [5 95]);
+            Behav_coh50_S_CI_low(i_rec, i_cue)  = CI_S(1);
+            Behav_coh50_S_CI_high(i_rec, i_cue) = CI_S(2);
+        end
+
+        Behav_coh50_N_boot{i_rec, i_cue} = coh50_N_boot;
+        Behav_coh50_S_boot{i_rec, i_cue} = coh50_S_boot;
+    end
+end
+
+%% convert chi2 from cells to matrices if needed
+if ~exist('Behav_N_chi2', 'var') || ~exist('Behav_S_chi2', 'var')
+    Behav_N_chi2 = nan(n_rec, n_cues);
+    Behav_S_chi2 = nan(n_rec, n_cues);
+
+    for i_rec = 1:n_rec
+        if ~isempty(unit_table.Behav_N_chi2{i_rec})
+            n_this = min(n_cues, numel(unit_table.Behav_N_chi2{i_rec}));
+            Behav_N_chi2(i_rec, 1:n_this) = unit_table.Behav_N_chi2{i_rec}(1:n_this);
+        end
+        if ~isempty(unit_table.Behav_S_chi2{i_rec})
+            n_this = min(n_cues, numel(unit_table.Behav_S_chi2{i_rec}));
+            Behav_S_chi2(i_rec, 1:n_this) = unit_table.Behav_S_chi2{i_rec}(1:n_this);
+        end
+    end
+end
+
+Behav_coh50_N_CI_width = Behav_coh50_N_CI_high - Behav_coh50_N_CI_low;
+Behav_coh50_S_CI_width = Behav_coh50_S_CI_high - Behav_coh50_S_CI_low;
+
+%%
+overfit_rec = unique(mod(find(Behav_coh50_S_CI_width > 2), height(unit_table)));
+overfit_idx = Behav_coh50_S_CI_width > 2;
+
+%% count poor fits
+amt_poorFit = sum(overfit_idx);
+
+%% build table for poor-fit entries
+ROI_list = {};
+Z3D_v_Z2D_list = [];
+rec_list = [];
+cue_list = [];
+pAI = [];
+TuningSig = [];
+
+for i_rec = 1:size(unit_table, 1)
+    for i_cue = 1:4
+        if overfit_idx(i_rec, i_cue) == 1
+            ROI_list{end+1,1} = unit_table.ROI{i_rec};
+            Z3D_v_Z2D_list(end+1,1) = unit_table.Z3D_v_Z2D{i_rec};
+            rec_list(end+1,1) = i_rec;
+            cue_list(end+1,1) = i_cue;
+            pAI(end+1, :) = unit_table.p_AI{i_rec};
+
+            if unit_table.p_AI{i_rec}(2) < 0.05 && unit_table.p_AI{i_rec}(3) < 0.05
+                TuningSig(end+1, 1) = 2;
+            elseif unit_table.p_AI{i_rec}(2) < 0.05 || unit_table.p_AI{i_rec}(3) < 0.05
+                TuningSig(end+1, 1) = 1;
+            else
+                TuningSig(end+1, 1) = 0;
+            end
+        end
+    end
+end
+
+poorFitTable = table(rec_list, cue_list, ROI_list, Z3D_v_Z2D_list, TuningSig, ...
+    'VariableNames', {'RecIdx', 'CueIdx', 'ROI', 'Z3D_v_Z2D', 'TuningSig'});
+
+disp(poorFitTable)
+
+%% classify poor-fit entries
+n = height(poorFitTable);
+Category = strings(n,1);
+
+for i = 1:n
+    if poorFitTable.TuningSig(i) == 2
+        if poorFitTable.Z3D_v_Z2D(i) < 0
+            Category(i) = "2D";
+        elseif poorFitTable.Z3D_v_Z2D(i) > 0
+            Category(i) = "3D";
+        else
+            Category(i) = "2D/3D boundary";
+        end
+    elseif poorFitTable.TuningSig(i) == 1
+        Category(i) = "Mono";
+    elseif poorFitTable.TuningSig(i) == 0
+        Category(i) = "None";
+    else
+        Category(i) = "Unknown";
+    end
+end
+
+poorFitTable.Category = Category;
+
+%% count MT/FST x category
+ROI_names = ["MT","FST"];
+Cat_names = ["2D","3D","Mono","None"];
+
+count_mat = zeros(numel(ROI_names), numel(Cat_names));
+
+for i_roi = 1:numel(ROI_names)
+    for i_cat = 1:numel(Cat_names)
+        count_mat(i_roi, i_cat) = sum(strcmp(poorFitTable.ROI, ROI_names(i_roi)) & ...
+            poorFitTable.Category == Cat_names(i_cat));
+    end
+end
+
+category_count_table = array2table(count_mat, ...
+    'VariableNames', cellstr(Cat_names), ...
+    'RowNames', cellstr(ROI_names));
+
+disp(category_count_table)
+
+%% -------- Plot sessions containing poor fits --------
+if individualPlot
+    colorsteps = [0 0 0;...
+        0 0 255;...
+        5 150 5;...
+        234 0 233] ./ 255;
+
+    x_plot = (-1:0.01:1)';
+    x_plot(abs(x_plot) < 1e-12) = [];
+
+    outDir_poor = fullfile('C:\EM\BehaviorFitting\', 'PoorFitSessions_allCues');
+    if ~exist(outDir_poor, 'dir')
+        mkdir(outDir_poor);
+    end
+
+    [n_rec, n_cues] = size(overfit_idx);
+
+    CoherenceArray_no0 = [-22 -14 -10 -8 -4 -2 2 4 8 10 14 22]./22;
+    CoherenceArray_8   = [-22 -14 -10 -8 8 10 14 22]./22;
+
+    for i_rec = 1:n_rec
+        if ~any(overfit_idx(i_rec, :) == 1)
+            continue
+        end
+
+        fig = figure('Color','w', ...
+            'Units','pixels', ...
+            'Position',[100 100 1800 520]);
+
+        ax0 = subplot(1,3,1); hold(ax0, 'on');
+        ax1 = subplot(1,3,2); hold(ax1, 'on');
+        ax2 = subplot(1,3,3); hold(ax2, 'on');
+
+        %% Panel 1: neuron tuning
+        Ch = unit_table.StimElec(i_rec);
+        NeuroMean = unit_table.tuning_mean{i_rec}(:, :, Ch);
+        NeuroSEM  = unit_table.tuning_SEM{i_rec}(:, :, Ch);
+
+        nanCols = all(isnan(NeuroSEM), 1);
+        NeuroSEM(:, nanCols)  = [];
+
+        if size(NeuroMean,2) == 13
+            zeroCol = 7;
+            NeuroMean(:, zeroCol) = [];
+            NeuroSEM(:, zeroCol)  = [];
+        end
+
+        if size(NeuroMean,2) == 12
+            CoherenceArray = CoherenceArray_no0;
+        elseif size(NeuroMean,2) == 8
+            CoherenceArray = CoherenceArray_8;
+        else
+            warning('Unexpected number of coherence points in rec %d: %d', i_rec, size(NeuroMean,2));
+            continue
+        end
+
+        axes(ax0); hold(ax0, 'on');
+        axis(ax0, 'square');
+        xticks(ax0, -1:0.5:1)
+        xticklabels(ax0, {'-1', 'Away', '0', 'Towards', '1'})
+        xlim(ax0, [-1 1])
+
+        set(ax0, 'FontSize', 18, 'LineWidth', 3, 'Box', 'off')
+        title(ax0, 'Neuron tuning curve', 'FontSize', 20)
+        ylabel(ax0, 'Firing Rate (spikes/s)', 'FontSize', 20)
+        xlabel(ax0, 'Coherence', 'FontSize', 20)
+
+        for cond = 1:4
+            fr = errorbar(ax0, CoherenceArray, NeuroMean(cond,:), NeuroSEM(cond,:));
+            color = colorsteps(cond, :);
+            fr.Color = color;
+            fr.Marker = 'o';
+            fr.MarkerFaceColor = color;
+            fr.MarkerEdgeColor = color;
+            fr.MarkerSize = 5;
+            fr.LineWidth = 2;
+        end
+
+        %% Panel 2 & 3: behavior
+        for i_cue = 1:n_cues
+            baseColor = colorsteps(i_cue, :);
+            isPoor = overfit_idx(i_rec, i_cue) == 1;
+
+            if isPoor
+                thisColor = baseColor;
+                ptAlpha = 0.5;
+                lw = 2.5;
+            else
+                thisColor = baseColor;
+                ptAlpha = 1.0;
+                lw = 2.5;
+            end
+
+            % Non-stim
+            DataN = Data_N{i_rec}(i_cue).data;
+            cohN = DataN(:,1);
+            PropToward_N = DataN(:,2) ./ DataN(:,3);
+            validN = DataN(:,3) > 0 & cohN ~= 0 & ...
+                isfinite(cohN) & isfinite(PropToward_N);
+
+            scatter(ax1, cohN(validN), PropToward_N(validN), ...
+                40, 'filled', ...
+                'MarkerFaceColor', thisColor, ...
+                'MarkerEdgeColor', 'none', ...
+                'MarkerFaceAlpha', 1, ...
+                'MarkerEdgeAlpha', 1);
+
+            try
+                mdl_full = unit_table.Behav_mdl_full{i_rec}{i_cue};
+                if ~isempty(mdl_full)
+                    tbl0 = table(x_plot, zeros(size(x_plot)), ...
+                        'VariableNames', {'coh','s'});
+                    p0 = predict(mdl_full, tbl0);
+                    plot(ax1, x_plot, p0, '-', 'Color', thisColor, 'LineWidth', lw);
+                end
+            catch
+                warning('Could not plot GLM N prediction for rec %d cue %d.', i_rec, i_cue);
+            end
+
+            % Stim
+            DataS = Data_S{i_rec}(i_cue).data;
+            cohS = DataS(:,1);
+            PropToward_S = DataS(:,2) ./ DataS(:,3);
+            validS = DataS(:,3) > 0 & cohS ~= 0 & ...
+                isfinite(cohS) & isfinite(PropToward_S);
+
+            scatter(ax2, cohS(validS), PropToward_S(validS), ...
+                40, 'filled', ...
+                'MarkerFaceColor', thisColor, ...
+                'MarkerEdgeColor', 'none', ...
+                'MarkerFaceAlpha', 1, ...
+                'MarkerEdgeAlpha', 1);
+
+            try
+                mdl_full = unit_table.Behav_mdl_full{i_rec}{i_cue};
+                if ~isempty(mdl_full)
+                    tbl1 = table(x_plot, ones(size(x_plot)), ...
+                        'VariableNames', {'coh','s'});
+                    p1 = predict(mdl_full, tbl1);
+                    plot(ax2, x_plot, p1, '-', 'Color', [thisColor ptAlpha], 'LineWidth', lw);
+                end
+            catch
+                warning('Could not plot GLM S prediction for rec %d cue %d.', i_rec, i_cue);
+            end
+        end
+
+        %% Formatting
+        title(ax1, sprintf('Rec %d: Non-stim', i_rec), 'FontWeight', 'normal');
+        title(ax2, sprintf('Rec %d: Stim', i_rec), 'FontWeight', 'normal');
+
+        set([ax1 ax2], 'FontSize', 16, 'TickDir', 'out', 'Box', 'off', 'LineWidth', 2);
+        xlim(ax1, [-1 1]); xlim(ax2, [-1 1]);
+        ylim(ax1, [0 1]);  ylim(ax2, [0 1]);
+        yticks(ax1, 0:0.2:1);
+        yticks(ax2, 0:0.2:1);
+        axis(ax1, 'square');
+        axis(ax2, 'square');
+
+        xlabel(ax1, 'coh');
+        ylabel(ax1, 'Proportion toward pref');
+        xlabel(ax2, 'coh');
+        ylabel(ax2, 'Proportion toward pref');
+
+        poorCueList = find(overfit_idx(i_rec,:) == 1);
+        sgtitle(sprintf('Rec %d | poor-fit cue(s): %s', ...
+            i_rec, mat2str(poorCueList)), 'FontWeight', 'bold');
+
+        fname = fullfile(outDir_poor, sprintf('poorfitSession_rec_%03d_allCues.png', i_rec));
+        exportgraphics(fig, fname, 'Resolution', 300);
+
+        close(fig);
+    end
+end
+
+%% Build FitTable
+ROI_list = cell(height(unit_table), 1);
+Z3D_v_Z2D_list = NaN(height(unit_table), 1);
+rec_list = NaN(height(unit_table), 1);
+pAI = NaN(height(unit_table), 4);
+TuningSig = NaN(height(unit_table), 1);
+AI = NaN(height(unit_table), 4);
+OD = NaN(height(unit_table), 1);
+CI_S = Behav_coh50_S_CI_width;
+ND_Cate = cell(height(unit_table), 1);
+
+for i_rec = 1:size(unit_table, 1)
+    ch = unit_table.StimElec(i_rec);
+
+    ROI_list{i_rec,1} = unit_table.ROI{i_rec};
+    Z3D_v_Z2D_list(i_rec) = unit_table.Z3D_v_Z2D{i_rec};
+    rec_list(i_rec) = i_rec;
+    pAI(i_rec, :) = unit_table.p_AI{i_rec};
+
+    if unit_table.p_AI{i_rec}(2) < 0.05 && unit_table.p_AI{i_rec}(3) < 0.05
+        TuningSig(i_rec) = 2;
+        if unit_table.Z3D_v_Z2D{i_rec} > 0
+            ND_Cate{i_rec,1} = '3D';
+        else
+            ND_Cate{i_rec,1} = '2D';
+        end
+    elseif unit_table.p_AI{i_rec}(2) < 0.05 || unit_table.p_AI{i_rec}(3) < 0.05
+        TuningSig(i_rec) = 1;
+        ND_Cate{i_rec,1} = 'MN';
+    else
+        TuningSig(i_rec) = 0;
+        ND_Cate{i_rec,1} = 'NA';
+    end
+
+    AI(i_rec, :) = unit_table.AI{i_rec}(:, ch);
+    OD(i_rec) = unit_table.OD_max{i_rec};
+end
+
+FitTable = table(rec_list, ROI_list, Z3D_v_Z2D_list, TuningSig, AI, OD, CI_S, ND_Cate, ...
+    'VariableNames', {'RecIdx', 'ROI', 'Z3D_v_Z2D', 'TuningSig', 'AI', 'OD', 'CI_S', 'ND'});
+
+%% Plot 8 figures: 2 ROI x 4 ND categories
+roi_list = {'MT', 'FST'};
+nd_list  = {'2D', '3D', 'MN', 'NA'};
+
+y_thr = 2;
+y_cap = 2.2;
+dotSize = 45;
+
+for i_roi = 1:numel(roi_list)
+    for i_nd = 1:numel(nd_list)
+        roi_this = roi_list{i_roi};
+        nd_this  = nd_list{i_nd};
+
+        disp([roi_this ' | ' nd_this])
+
+        idx_group = strcmp(FitTable.ROI, roi_this) & strcmp(FitTable.ND, nd_this);
+
+        if ~any(idx_group)
+            continue
+        end
+
+        fig = figure('Color','w','Position',[100 100 1200 900]);
+        tl = tiledlayout(2,2,'TileSpacing','compact','Padding','compact');
+
+        for i_cue = 1:4
+            nexttile; hold on;
+
+            x = abs(FitTable.AI(idx_group, i_cue));
+            y = FitTable.CI_S(idx_group, i_cue);
+            od = abs(FitTable.OD(idx_group));
+
+            valid = isfinite(x) & isfinite(y) & isfinite(od);
+            x = x(valid);
+            y = y(valid);
+            od = od(valid);
+
+            if isempty(x)
+                title(sprintf('Cue %d (n=0)', i_cue));
+                xlabel('|AI|');
+                ylabel('CI_S width');
+                xlim([0 1]);
+                ylim([0 y_cap+0.05]);
+                yline(y_thr, 'k--', 'LineWidth', 1.2);
+                axis square;
+                box off;
+                continue
+            end
+
+            idx_low  = y <= y_thr;
+            idx_high = y >  y_thr;
+
+            y_plot = y;
+            y_plot(idx_high) = y_cap;
+
+            if any(idx_low)
+                scatter(x(idx_low), y_plot(idx_low), dotSize, od(idx_low), ...
+                    'filled', 'MarkerFaceAlpha', 0.75, 'MarkerEdgeColor', 'k');
+            end
+
+            if any(idx_high)
+                scatter(x(idx_high), y_plot(idx_high), dotSize+12, od(idx_high), ...
+                    '^', 'filled', 'MarkerFaceAlpha', 0.9, 'MarkerEdgeColor', 'k');
+            end
+
+            yline(y_thr, 'k--', 'LineWidth', 1.2);
+
+            p_x  = NaN;
+            p_od = NaN;
+            p_int = NaN;
+            R2 = NaN;
+
+            if numel(x) >= 4 && numel(unique(x)) > 1 && numel(unique(od)) > 1
+                tbl_lm = table(y, x, od, 'VariableNames', {'CI_S', 'AIabs', 'OD'});
+
+                try
+                    lm = fitlm(tbl_lm, 'CI_S ~ AIabs*OD');
+
+                    coefNames = lm.CoefficientNames;
+                    coefP = lm.Coefficients.pValue;
+
+                    idx1 = strcmp(coefNames, 'AIabs');
+                    idx2 = strcmp(coefNames, 'OD');
+                    idx3 = strcmp(coefNames, 'AIabs:OD');
+
+                    if any(idx1), p_x   = coefP(idx1); end
+                    if any(idx2), p_od  = coefP(idx2); end
+                    if any(idx3), p_int = coefP(idx3); end
+
+                    R2 = lm.Rsquared.Ordinary;
+                catch
+                    warning('LM failed for %s | %s | cue %d', roi_this, nd_this, i_cue);
+                end
+            end
+
+            xlabel(sprintf('|AI| (Cue %d)', i_cue));
+            ylabel('CI_S width');
+            title(sprintf('Cue %d', i_cue));
+            xlim([0 1]);
+
+            y_min = min(y(idx_low), [], 'omitnan');
+            if isempty(y_min) || isnan(y_min)
+                y_min = 0;
+            end
+            ylim([min(0, y_min) y_cap+0.05]);
+
+            text(0.02, 0.98, sprintf('<=2: n=%d\n>2: n=%d', sum(idx_low), sum(idx_high)), ...
+                'Units','normalized', 'VerticalAlignment','top', 'FontSize',10);
+
+            text(0.02, 0.72, sprintf('p_{|AI|}=%.3g\np_{OD}=%.3g\np_{int}=%.3g\nR^2=%.2f', ...
+                p_x, p_od, p_int, R2), ...
+                'Units','normalized', 'VerticalAlignment','top', 'FontSize',10, ...
+                'BackgroundColor','w', 'Margin', 4);
+
+            axis square;
+            box off;
+        end
+
+        cb = colorbar;
+        cb.Layout.Tile = 'east';
+        cb.Label.String = '|OD|';
+
+        title(tl, sprintf('%s | %s | |AI| vs CI_S across cues', roi_this, nd_this));
+    end
+end
