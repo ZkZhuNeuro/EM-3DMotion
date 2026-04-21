@@ -1,0 +1,18 @@
+UnitT size: [16 1 117]
+UnitID class=double size=[1 1]
+UnitID value:
+0 
+
+row 1: n=81 min=5.43153 max=7.26437
+row 2: n=61 min=5.44553 max=7.27447
+row 3: n=85 min=5.46447 max=7.28083
+row 4: n=54 min=5.43827 max=7.27447
+row 5: n=72 min=5.43827 max=7.2807
+row 6: n=105 min=5.46057 max=7.25973
+row 7: n=52 min=5.56413 max=7.23693
+row 8: n=33 min=5.4384 max=7.2752
+row 9: n=85 min=5.5185 max=7.2807
+row 10: n=15 min=5.61263 max=7.1884
+
+Second-dim rows
+col 1: n=1161 min=5.43153 max=7.28083

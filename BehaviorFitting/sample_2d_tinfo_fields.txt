@@ -1,0 +1,43 @@
+FILEVARS
+Config | struct | [1 1]
+FName | char | [1 39]
+PathName | char | [1 31]
+TrialInfo | struct | [1 773]
+TOPVAR=Config
+TOPCLASS=struct
+TOPSIZE=[1 1]
+FIELDS
+ScrWidth
+ScrHeight
+MinV
+MaxV
+MinRange
+MaxRange
+SmoothSpan
+TStartEID
+TEndEID
+AltTEndEID
+VFrameThres
+VUnit
+SacThres
+SacCheckSpan
+ScrDistmm
+ScrWidthmm
+ScrHeightmm
+P2MM_V
+P2MM_H
+SacOnEID
+SacEndEID
+AISampleRate
+AllOf
+NoneOf
+AnyOf
+TimeBin
+ZeroE
+PreT
+BaseT
+PostT
+DispTrialType
+FName
+SFreq
+EFreq

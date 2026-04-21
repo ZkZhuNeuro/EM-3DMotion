@@ -1,0 +1,2 @@
+Rows=892
+Row 1 ROI=MT Name=Jim_MT_25Jan2019_Sorted-03_LateralMotion_TInfo.mat Codes=[8001 8002 8003] Size=[3 8]

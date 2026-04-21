@@ -1,0 +1,6 @@
+UnitT size: [1 3 99]
+UnitID class=double size=[1 3]
+UnitID value:
+0 1 2 
+
+row 1: n=161 min=23.1566 max=25.2656

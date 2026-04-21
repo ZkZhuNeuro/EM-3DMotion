@@ -1,0 +1,50 @@
+NTRIALS=773
+FIELDS
+UnitID
+StartTimeStamp
+UnitT
+UnitSDF
+EndTimeStamp
+EventT
+EID
+LFrameSig
+RFrameSig
+LEyeX
+LEyeY
+LEyeS
+REyeX
+REyeY
+REyeS
+LFP
+checkTimeFlag
+missingTimeFlag
+AITs
+OffsetLX
+OffsetLY
+OffsetRX
+OffsetRY
+
+FIRSTTRIAL_SUMMARY
+UnitID | double | [1 1]
+StartTimeStamp | double | [1 1]
+UnitT | double | [16 1 117]
+UnitSDF | double | [16 1 1898]
+EndTimeStamp | double | [1 1]
+EventT | double | [1 16]
+EID | double | [1 16]
+LFrameSig | double | [1 1897]
+RFrameSig | double | [1 1897]
+LEyeX | double | [1 1897]
+LEyeY | double | [1 1897]
+LEyeS | double | [1 1897]
+REyeX | double | [1 1897]
+REyeY | double | [1 1897]
+REyeS | double | [1 1897]
+LFP | double | [16 1897]
+checkTimeFlag | double | [1 1]
+missingTimeFlag | double | [1 1]
+AITs | double | [1 1897]
+OffsetLX | double | [1 1]
+OffsetLY | double | [1 1]
+OffsetRX | double | [1 1]
+OffsetRY | double | [1 1]

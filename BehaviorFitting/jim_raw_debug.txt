@@ -1,0 +1,35 @@
+NTRIALS=390
+UNIQUE_EID: 111 112 113 114 116 117 118 119 120 140 141 5000 7041 8001 8002 8003 9919 19985 30000 30045 30090 30135 30180 30225 30270 30315 
+
+TRIAL 1 stimOn=25.1449 stimOff=[] start=23.1469 end=25.2719
+  EIDs: 9919 19985 5000 7041 8002 
+  UnitT min=23.1566 max=25.2656 n=161
+
+TRIAL 2 stimOn=26.8861 stimOff=[] start=25.2719 end=27.8886
+  EIDs: 9919 19985 5000 7041 8001 
+  UnitT min=25.2724 max=27.8863 n=199
+
+TRIAL 3 stimOn=28.452 stimOff=[] start=27.8886 end=29.4391
+  EIDs: 9919 19985 5000 7041 8001 
+  UnitT min=27.8913 max=29.4379 n=215
+
+TRIAL 4 stimOn=30.0034 stimOff=[] start=29.4391 end=31.0648
+  EIDs: 9919 19985 5000 7041 8001 
+  UnitT min=29.4406 max=31.044 n=176
+
+TRIAL 5 stimOn=33.5451 stimOff=[] start=31.0648 end=33.6228
+  EIDs: 9919 19985 5000 7041 8002 
+  UnitT min=31.1378 max=33.6216 n=159
+
+TRIAL 6 stimOn=[] stimOff=[] start=33.6231 end=33.9479
+  EIDs:  
+  UnitT min=33.6287 max=33.8859 n=22
+
+TRIAL 7 stimOn=[] stimOff=[] start=33.9479 end=34.3814
+  EIDs:  
+  UnitT min=33.9737 max=34.3436 n=12
+
+TRIAL 8 stimOn=35.0034 stimOff=[] start=34.3814 end=36.0065
+  EIDs: 9919 19985 5000 7041 8001 
+  UnitT min=34.3862 max=35.996 n=207
+

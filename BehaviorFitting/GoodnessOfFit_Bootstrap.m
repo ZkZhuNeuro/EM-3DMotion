@@ -1,6 +1,23 @@
 clear
 load C:\EM\BehaviorFitting\unit_table_lapseHardCap_06.mat
+inclusionData = load("C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\BehaviorFitting\inclusion_index.mat");
 
+inclusionFields = fieldnames(inclusionData);
+inclusion_idx = [];
+for i_field = 1:numel(inclusionFields)
+    candidate = inclusionData.(inclusionFields{i_field});
+    if islogical(candidate) && isvector(candidate) && numel(candidate) == height(unit_table)
+        inclusion_idx = candidate(:);
+        break
+    end
+end
+
+assert(~isempty(inclusion_idx), ...
+    'Could not find a logical inclusion index matching height(unit_table).');
+
+origRecIdx = find(inclusion_idx);
+unit_table = unit_table(inclusion_idx, :);
+clear inclusionData inclusionFields candidate i_field
 
 %%
 if ~ismember('Behave_QC_N', unit_table.Properties.VariableNames)
@@ -13,6 +30,8 @@ end
 
 CI_N = NaN(size(unit_table, 1), 4, 2);
 CI_S = NaN(size(unit_table, 1), 4, 2);
+pGOF_N = NaN(size(unit_table, 1), 4);
+pGOF_S = NaN(size(unit_table, 1), 4);
 
 for i_rec = 1:size(unit_table, 1)
     if isempty(unit_table.Behave_QC_N{i_rec})
@@ -22,21 +41,45 @@ for i_rec = 1:size(unit_table, 1)
         unit_table.Behave_QC_S{i_rec} = cell(1,4);
     end
 
-    for i_cue = 1
+    for i_cue = 1:4
+        disp(['Cue: ', num2str(i_cue), '/4, Rec: ', num2str(i_rec), '/', num2str(size(unit_table, 1))])
         CI_N(i_rec, i_cue, :) = unit_table.Behave_N{i_rec}{i_cue}.conf_Intervals(1, :, 1);
         CI_S(i_rec, i_cue, :) = unit_table.Behave_S{i_rec}{i_cue}.conf_Intervals(1, :, 1);
 
         if ~isempty(unit_table.Behave_N{i_rec}{i_cue})
-            unit_table.Behave_QC_N{i_rec}{i_cue} = ...
-                evaluate_psignifit_quality(unit_table.Behave_N{i_rec}{i_cue}, 100, 0.5, 0.005);
+            if isempty(unit_table.Behave_QC_N{i_rec}{i_cue})
+                unit_table.Behave_QC_N{i_rec}{i_cue} = ...
+                    evaluate_psignifit_quality(unit_table.Behave_N{i_rec}{i_cue}, 100, 0.5, 0.005);
+            end
+            pGOF_N(i_rec, i_cue) = extract_first_p_gof(unit_table.Behave_QC_N{i_rec}{i_cue});
         end
 
         if ~isempty(unit_table.Behave_S{i_rec}{i_cue})
-            unit_table.Behave_QC_S{i_rec}{i_cue} = ...
-                evaluate_psignifit_quality(unit_table.Behave_S{i_rec}{i_cue}, 100, 0.5, 0.005);
+            if isempty(unit_table.Behave_QC_S{i_rec}{i_cue})
+                unit_table.Behave_QC_S{i_rec}{i_cue} = ...
+                    evaluate_psignifit_quality(unit_table.Behave_S{i_rec}{i_cue}, 100, 0.5, 0.005);
+            end
+            pGOF_S(i_rec, i_cue) = extract_first_p_gof(unit_table.Behave_QC_S{i_rec}{i_cue});
         end
     end
 end
+
+%%
+cueNames = {'Comb', 'Left', 'Right', 'Stereo'};
+pThresh = 0.05;
+
+badFits_N = collect_bad_gof(unit_table, unit_table.Behave_QC_N, cueNames, pThresh, origRecIdx);
+badFits_S = collect_bad_gof(unit_table, unit_table.Behave_QC_S, cueNames, pThresh, origRecIdx);
+
+disp('N fits with first p_gof < 0.05:')
+disp(badFits_N)
+
+disp('S fits with first p_gof < 0.05:')
+disp(badFits_S)
+
+%%
+plot_p_gof_matrix(pGOF_N, cueNames, pThresh, 'N');
+plot_p_gof_matrix(pGOF_S, cueNames, pThresh, 'S');
 
 %%
 CI_N_width = squeeze(CI_N(:, :, 2) - CI_N(:, :, 1));
@@ -112,6 +155,8 @@ function [gof_p, devBoot] = bootstrap_gof_deviance(result, nBoot)
     end
 
     devBoot = NaN(nBoot,1);
+    lastBootstrapError = [];
+    nSuccess = 0;
 
     for b = 1:nBoot
         simData = simulate_psychometric_dataset(result);
@@ -119,7 +164,9 @@ function [gof_p, devBoot] = bootstrap_gof_deviance(result, nBoot)
         try
             simResult = psignifit_controlLapse(simData, lapseCap, opt);
             devBoot(b) = simResult.deviance;
-        catch
+            nSuccess = nSuccess + 1;
+        catch ME
+            lastBootstrapError = ME;
             devBoot(b) = NaN;
         end
     end
@@ -127,8 +174,20 @@ function [gof_p, devBoot] = bootstrap_gof_deviance(result, nBoot)
     devBoot = devBoot(~isnan(devBoot));
 
     if isempty(devBoot)
-        gof_p = NaN;
+        if isempty(lastBootstrapError)
+            error('bootstrap_gof_deviance:NoSuccessfulBootstrapFits', ...
+                'All bootstrap refits failed: psignifit_controlLapse never completed successfully.');
+        else
+            error('bootstrap_gof_deviance:NoSuccessfulBootstrapFits', ...
+                ['All bootstrap refits failed: psignifit_controlLapse never completed successfully. ' ...
+                 'Last error: %s'], lastBootstrapError.message);
+        end
     else
+        if nSuccess < nBoot
+            warning('bootstrap_gof_deviance:PartialBootstrapFailure', ...
+                '%d of %d bootstrap refits failed and were excluded from p_g_o_f.', ...
+                nBoot - nSuccess, nBoot);
+        end
         gof_p = mean(devBoot >= obsDev);
     end
 end
@@ -157,5 +216,118 @@ function simData = simulate_psychometric_dataset(result)
     end
 
     simData = [x, kSim, n];
+end
+
+function badFits = collect_bad_gof(unit_table, qcCell, cueNames, pThresh, origRecIdx)
+
+    rows = [];
+    recLabels = {};
+    cueIdx = [];
+    cueLabels = {};
+    pVals = [];
+
+    for i_rec = 1:height(unit_table)
+        if isempty(qcCell{i_rec})
+            continue
+        end
+
+        for i_cue = 1:numel(qcCell{i_rec})
+            qc = qcCell{i_rec}{i_cue};
+            p_gof = extract_first_p_gof(qc);
+
+            if ~isnan(p_gof) && p_gof < pThresh
+                if nargin >= 5 && ~isempty(origRecIdx)
+                    rows(end+1, 1) = origRecIdx(i_rec); %#ok<AGROW>
+                else
+                    rows(end+1, 1) = i_rec; %#ok<AGROW>
+                end
+                recLabels{end+1, 1} = get_rec_label(unit_table, i_rec); %#ok<AGROW>
+                cueIdx(end+1, 1) = i_cue; %#ok<AGROW>
+                cueLabels{end+1, 1} = cueNames{min(i_cue, numel(cueNames))}; %#ok<AGROW>
+                pVals(end+1, 1) = p_gof; %#ok<AGROW>
+            end
+        end
+    end
+
+    badFits = table(rows, recLabels, cueIdx, cueLabels, pVals, ...
+        'VariableNames', {'row', 'rec', 'cueIdx', 'cue', 'p_gof_first'});
+end
+
+function p_gof = extract_first_p_gof(qc)
+
+    p_gof = NaN;
+
+    if isempty(qc) || ~isstruct(qc)
+        return
+    end
+
+    if isfield(qc, 'p_gof')
+        p_gof = qc.p_gof;
+    elseif isfield(qc, 'gof_p')
+        p_gof = qc.gof_p;
+    end
+
+    if ~isempty(p_gof)
+        p_gof = p_gof(1);
+    else
+        p_gof = NaN;
+    end
+end
+
+function recLabel = get_rec_label(unit_table, i_rec)
+
+    recCandidates = {'rec', 'Rec', 'recording', 'Recording', ...
+        'session', 'Session', 'filename', 'Filename', ...
+        'file', 'File', 'unit', 'Unit'};
+
+    recLabel = sprintf('row_%d', i_rec);
+
+    for i_name = 1:numel(recCandidates)
+        varName = recCandidates{i_name};
+        if ismember(varName, unit_table.Properties.VariableNames)
+            recLabel = stringify_table_value(unit_table.(varName), i_rec);
+            return
+        end
+    end
+end
+
+function out = stringify_table_value(columnData, i_rec)
+
+    if iscell(columnData)
+        value = columnData{i_rec};
+    else
+        value = columnData(i_rec, :);
+    end
+
+    if isstring(value)
+        out = char(value);
+    elseif ischar(value)
+        out = value;
+    elseif isnumeric(value) || islogical(value)
+        out = mat2str(value);
+    else
+        out = char(string(value));
+    end
+end
+
+function plot_p_gof_matrix(pGOF, cueNames, pThresh, condLabel)
+
+    figure('Color', 'w');
+    imagesc(pGOF, [0, 1]);
+    ax = gca;
+    ax.YDir = 'normal';
+    ax.XTick = 1:numel(cueNames);
+    ax.XTickLabel = cueNames;
+    xlabel('Cue');
+    ylabel('Recording index');
+    title(sprintf('%s first p_g_o_f', condLabel));
+    colormap(parula);
+    cb = colorbar;
+    cb.Label.String = 'first p_g_o_f';
+
+    hold on
+    [badRec, badCue] = find(pGOF < pThresh);
+    plot(badCue, badRec, 'ko', 'MarkerSize', 4, 'LineWidth', 0.75);
+    hold off
 end
 

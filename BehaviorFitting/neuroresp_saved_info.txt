@@ -1,0 +1,5 @@
+NeuroResp | cell | [1 459]
+TOPVARS
+NeuroResp
+VAR NeuroResp CLASS cell SIZE [1 459]
+CELL1_CLASS double CELL1_SIZE [3 8 13 26]

@@ -1,0 +1,7 @@
+ROWS=892
+ROW 1 name=Jim_MT_25Jan2019_Sorted-03_LateralMotion_TInfo.mat unit=2 n=240 nanFrac=1
+ firstVals: NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN 
+ROW 2 name=Jim_MT_25Jan2019_Sorted-03_LateralMotion_TInfo.mat unit=3 n=240 nanFrac=1
+ firstVals: NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN 
+ROW 3 name=Jim_MT_15Feb2019_TT2_mrg_Sorted-02_LateralMotion_TInfo.mat unit=2 n=297 nanFrac=1
+ firstVals: NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN 
