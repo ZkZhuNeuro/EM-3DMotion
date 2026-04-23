@@ -1,0 +1,143 @@
+clear; close all
+load('RF_table_20240703.mat')
+OrigPoint_Voxel = [127, 208, 68];
+MasterPlotOptions
+Img_nii = 'P:\MRI\R12059_GridScan\anaGrid\R12059_T1W_brain_Org2AvgGrid.nii.gz'; %uigetfile({'*.*'},'Select a structural image');
+% LVE
+ROI_nii_file = 'P:\MRI\R12059_GridScan\anaGrid\R12059_allROIs_LVE00_Both_org2Grid_updated.nii.gz'; %uigetfile({'*.*'},'Select an ROI image file');
+ROI_intensity = [51, 46, 28, 24]; % Left hemisphere
+% FVE
+% ROI_nii_file = 'P:\MRI\R12059_GridScan\anaGrid\R12059_allROIs_FVE91_Right_org2Grid_updated.nii.gz';
+% ROI_intensity = [107,77,68,47];
+
+color_mat = [0 0.5 0.5; 1 1 0; plotOptions.AreaColors.MT; plotOptions.AreaColors.FST; 0.75 0.5 0.25; 0.75 0.5 0.25;]; % Right
+intensity_labels = [];
+
+hole = [22, 22];
+guideTube = 27;
+depth = 10+guideTube;
+tetrode = ones(size(hole, 1), 1);
+%%
+ML_holes = unique(hole(:, 1));
+slice = ML_holes;
+%
+ML_Voxel = OrigPoint_Voxel(1) + (slice*0.8)*2; %OrigPoint_Voxel(1) or (2)?
+
+holes_to_plot = find(hole(:,1) == slice);
+
+GoalHole_Left = hole(holes_to_plot,:);
+GoalDepth = depth(holes_to_plot);
+GoalTetrode = tetrode(holes_to_plot);
+AP_Voxel = [];
+Depth_Voxel = [];
+ML_Index = ML_Voxel +1;
+
+Img_nii = load_nii(Img_nii); % Load structural image
+Image = squeeze(Img_nii.img(round(ML_Index), :, :)); % Take slice based on AP position
+Image = fliplr(imrotate(Image, 180)); % Rotate properly
+ROI = load_nii(ROI_nii_file); % Load ROI file
+ROI = squeeze(ROI.img(round(ML_Index), :, :)); % Take slice based on AP position
+ROI = double(ROI); % Sometimes this is stored as uint8 which won't work
+ROI = fliplr(imrotate(ROI,180)); % Flip to match coordinate conventions of these images (one is opposite...can't remember which)
+    
+if ~isinteger(Image)
+    Image = mat2gray(Image); % Fix non integer values so that we can grey scale things and remove all the extra black ink
+end
+Image(Image == 0) = 255; % Get rid of all the black outside the brain to save ink
+[I,J] = find(Image ~=255);
+figure();
+h=imshow(Image,'InitialMagnification',1000); hold on;
+for r = 1:length(ROI_intensity)
+    % Add colors for each ROI area
+    slice_ROI = ROI;
+    slice_ROI(slice_ROI ~= ROI_intensity(r) ) = 0;
+    slice_ROI(slice_ROI == ROI_intensity(r) ) = 1;
+    color = cat(3, ones(size(Image)).*color_mat(r,1), ones(size(Image)).*color_mat(r,2), ones(size(Image)).*color_mat(r,3));
+    hG(r) = imshow(color,'InitialMagnification',500);
+    set(hG(r), 'AlphaData', 1*slice_ROI); % Color code the area
+    ROI_legend_points(r) = plot(NaN,NaN,'MarkerFaceColor',color_mat(r,:));
+end
+
+hold on;
+%%
+ecc = [];
+row = [];
+col = [];
+GT = [];
+depth = [];
+RF = {};
+xVal = {};
+yVal = {};
+offset = [];
+AP_Voxel = [];
+Depth_Voxel = [];
+for i_unit = 1:size(RF_table, 1)
+    if ~isempty(RF_table.RFCenter_char{i_unit}) && strcmp(RF_table.ROI{i_unit}, 'FST')
+        ch = RF_table.StimElec(i_unit);
+        loc_all = RF_table.RFCenter_char{i_unit};
+        loc = str2num(loc_all{ch});
+        ecc = [ecc, sqrt(loc * loc')];
+        col = [col, RF_table.Hole(i_unit, 1)];
+        row = [row, RF_table.Hole(i_unit, 2)];
+        GT = [GT; RF_table.Guide(i_unit)];
+        depth = [depth; RF_table.Depth(i_unit)];
+        RF = [RF; RF_table.rawRFmap{i_unit}(ch)];
+        xVal = [xVal; RF_table.uniXPos{i_unit}(ch)];
+        yVal = [yVal; RF_table.uniYPos{i_unit}(ch)];
+        offset = [offset; RF_table.Offset(i_unit, :)];
+        AP_Voxel = [AP_Voxel; OrigPoint_Voxel(3) - ...
+            ((29 - RF_table.Hole(i_unit, 2))*0.8)*2];
+        Depth_Voxel = [Depth_Voxel; 256 - (OrigPoint_Voxel(2) - 2*(RF_table.Guide(i_unit) ...
+            + RF_table.Depth(i_unit) + RF_table.Offset(i_unit, :)))];
+    end
+end
+
+% row_unique = unique(row);
+
+% for i_row = 1:size(ecc, 2)
+%     row_idx = find(row == i_row);
+%     col_row = col(row_idx);
+%     row_row = ones(size(col_row)) * i_row;
+%     GT_row = GT(row_idx);
+%     depth_row = depth(row_idx);
+%     offset_row = offset(row_idx, :);
+%     RF_row = RF(row_idx);
+%     xVal_row = xVal(row_idx);
+%     yVal_row = yVal(row_idx);
+% end
+%     PlotRecordingLocation_JimFST([21,21;22,21], [27; 27], [10; 10], [0 0 0; 0 0 0])
+for i_rec = 1:size(ecc, 2)
+    scatter(AP_Voxel(i_rec), Depth_Voxel(i_rec),15,'go','filled','MarkerEdgeColor','k', 'ButtonDownFcn', @Callback);
+end
+
+
+function Callback(dot, ~)
+windowWidth = 1920; %(pixels)
+windowHeight = 1080; %(pixels)
+
+AP_Voxel = evalin('base', 'AP_Voxel');
+Depth_Voxel = evalin('base', 'Depth_Voxel');
+RF = evalin('base', 'RF');
+xVal = evalin('base', 'xVal');
+yVal = evalin('base', 'yVal');
+
+
+idx = find(ML_Index == dot.XData & Depth_Voxel == dot.YData);
+RF_rec = RF_row{idx};
+xVal_rec = xVal_row{idx};
+yVal_rec = yVal_row{idx};
+figure()
+imagesc(xVal_rec(:), yVal_rec(:), RF_rec); colormap('parula');
+axis on;
+axis square;
+caxis([min(RF_rec(:)) max(RF_rec(:))]); hold on;
+xlim([min(xVal_rec(:)),max(xVal_rec(:))]); ylim([min(yVal_rec(:)),max(yVal_rec(:))]);
+hold on
+plot([min(xVal_rec(:)),max(xVal_rec(:))], [windowHeight/2, windowHeight/2], 'Color', [1 1 1], 'LineWidth', 2)
+plot([windowWidth/2, windowWidth/2], [min(yVal_rec(:)),max(yVal_rec(:))], 'Color', [1 1 1], 'LineWidth', 2)
+% set(gca, 'XTick', XTick4map, 'YTick', YTick4map, 'FontSize', Tick_FontSize);
+% set(gca, 'XTickLabel', num2cell(XTick4map_deg), 'box', 'on')
+% set(gca, 'YTickLabel', num2cell(YTick4map_deg), 'TickDir', 'out', 'Layer', 'top')
+% set(gca,'YDir','reverse');
+% title(ROI, 'FontSize', 10);
+end

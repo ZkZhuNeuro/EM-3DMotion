@@ -1,7 +1,10 @@
-function [rawRFmap, uniXPos, uniYPos, meanXYpos, RFmapTable_allSti, SpikeRate_Baseline] = RFMappingFunction_Lo(unit_table, i_tt, i_unit)
+function [rawRFmap, uniXPos, uniYPos, meanXYpos, RFmapTable_allSti, SpikeRate_Baseline] = RFMappingFunction_Lo(unit_table, i_tt, i_unit, unitProgressText, targetUnitID)
 %% Settings
 % ElectrodeNums = [1:16];
-disp('Analyzing Receptive Fields...');
+if nargin < 4 || isempty(unitProgressText)
+    unitProgressText = sprintf('TT row %d, unit file %d', i_tt, i_unit);
+end
+disp(['Analyzing receptive field: ', unitProgressText]);
 windowWidth = 1920; %(pixels)
 windowHeight = 1080; %(pixels)
 viewingDistance = 570; %(mm)
@@ -27,10 +30,24 @@ RawSpikes = load(string(fullfile(pathname,file_names)));
 RawSpikes = RawSpikes.Raw1;
 
 %%
-unitAmt = numel(unique(RawSpikes(:, 2))) - 1;
-for e = 1:unitAmt
-    Spike(e).SpikeT(:)= RawSpikes(RawSpikes(:, 2) == e,3);
+unitIDs = unique(RawSpikes(:, 2));
+unitIDs(unitIDs == 0) = [];
+
+if nargin < 5 || isempty(targetUnitID)
+    if numel(unitIDs) == 1
+        targetUnitID = unitIDs(1);
+    else
+        error(['Multiple sorted units were found in %s. Pass targetUnitID ', ...
+            'explicitly. Available units: %s'], file_names, mat2str(unitIDs'));
+    end
 end
+
+if ~ismember(targetUnitID, unitIDs)
+    error('Target internal unit %d was not found in %s. Available units: %s', ...
+        targetUnitID, file_names, mat2str(unitIDs'));
+end
+
+SpikeTsForFile = RawSpikes(RawSpikes(:, 2) == targetUnitID, 3);
 
 %%
 [ns_status, hFile] = ns_OpenFile([pathname 'Raw Ripple\' nev_names{1}]);
@@ -55,11 +72,11 @@ if isequal(ns_status,'ns_OK')
             numCount = entityInfo.ItemCount;
             NumT=1;
             for i = 1:numCount
-                disp(['decoding Trial structure: ' num2str(i) '/' num2str(numCount) ' done']);
                 [~, timeStamps, rawdata, ~] = ns_GetEventData(hFile, EventCh, i);
                 Event.EventID(end+1) = rawdata;
                 Event.timestamps(end+1) = timeStamps;
             end
+            disp(['Decoded ', num2str(numCount), ' event records for ', unitProgressText]);
         end
     end
 end
@@ -174,10 +191,10 @@ meanDura = round(mean(goodStimDura),2);
 % dcm_obj = datacursormode(f); % Have a built-in interaction after 2018.
 % set(dcm_obj,'UpdateFcn',{@rappidofflineupdate,f})
 
-for i_unit = 1:numel(unitAmt)
+for unitLoop = 1
 
-    SpikeTs = Spike(i_unit).SpikeT;
-    disp('Decoding stimulus information from each valid trial...')
+    SpikeTs = SpikeTsForFile;
+    disp(['Computing firing rates for ', unitProgressText])
     colorIndex = [0 0.5 0.5; 0 1 0; 0 0 0.7; 0 0.7 0; 0 1 1];
     % while 1
     %% Baseline Raster Plot
@@ -233,7 +250,7 @@ for i_unit = 1:numel(unitAmt)
     end
 
     %% Sorted by Stimulus Locations
-    disp('Sorting by stimulus location...');
+    disp(['Sorting responses by stimulus location for ', unitProgressText]);
     uniXPos = unique(StimParam.StiXPos);
     uniYPos = unique(StimParam.StiYPos);
     uniColor = unique(StimParam.StiColor);
@@ -302,7 +319,8 @@ for i_unit = 1:numel(unitAmt)
     %%
     RFData.Date = unit_table.Date(i_tt);
     RFData.TT = i_tt;
-    RFData.i_unit = i_unit;
+    RFData.i_unit = targetUnitID;
+    RFData.InternalUnitID = targetUnitID;
     RFData.rawRFmap = rawRFmap;
     RFData.uniXPos = uniXPos;
     RFData.uniYPos = uniYPos;
@@ -325,7 +343,8 @@ for i_unit = 1:numel(unitAmt)
     sortedNum = tok{2};   % 2  （'02' -> 2）
 
     savePath = ['P:\Codes\Matlab\offlineAnalysis\3DMotionAnalysis\Stimulation\John_analysis_try\LoRFs\RFData\', Monkey];
-    saveFilename = ['RF_', datestr(unit_table.Date(i_tt), 'yyyymmdd'), 'TT', ttNum, 'Unit', sortedNum, '.mat'];
+    saveFilename = ['RF_', datestr(unit_table.Date(i_tt), 'yyyymmdd'), ...
+        'TT', ttNum, 'Sort', sortedNum, 'Unit', num2str(targetUnitID), '.mat'];
     save(fullfile(savePath, saveFilename), "RFData");
 end
 end

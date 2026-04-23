@@ -71,6 +71,13 @@ excel_dt  = datetime(tb.Date(excel_table_inds));
 
 [tf, inclusion_folder_indices] = ismember(excel_dt, folder_dt);
 
+% Some recording spreadsheets contain multiple included rows for the same
+% date. Each date folder contains the same SparseNoise waveform files, so
+% processing every repeated spreadsheet row duplicates RFs in unit_table.
+[~, unique_recording_rows] = unique(inclusion_folder_indices, 'stable');
+inclusion_folder_indices = inclusion_folder_indices(unique_recording_rows);
+excel_table_inds = excel_table_inds(unique_recording_rows);
+
 %% Step through each recording date and obtain the file names of interest
 for recording_num = 1:length(inclusion_folder_indices)
     % for recording_num = 73
@@ -180,10 +187,106 @@ for recording_num = 1:length(inclusion_folder_indices)
 
 end
 
-%%
-% for rec = 1
+%% Analyze each sorted unit and keep trial-by-trial RF responses.
+unit_table = table();
 for i_tt = 1:size(tt_table, 1)
-    for i_unit = 1:size(tt_table.Names{i_tt}, 1)
-        RFMappingFunction_Lo(tt_table, i_tt, i_unit);
+    nFilesThisTT = size(tt_table.Names{i_tt}, 1);
+    fprintf('Processing TT/session row %d/%d: %d waveform file(s)\n', ...
+        i_tt, size(tt_table, 1), nFilesThisTT);
+
+    for i_file = 1:nFilesThisTT
+        fileName = tt_table.Names{i_tt}{i_file};
+        unitIDsThisFile = getWaveformUnitIDs(tt_table.Paths{i_tt}, fileName);
+        [ttNumForProgress, sortedNumForProgress] = ...
+            parseSparseNoiseUnitName(fileName);
+
+        fprintf('  TT%d sort-file-%02d: %d unit(s)\n', ...
+            ttNumForProgress, sortedNumForProgress, numel(unitIDsThisFile));
+
+        for i_unit = 1:numel(unitIDsThisFile)
+            targetUnitID = unitIDsThisFile(i_unit);
+            unitProgressText = sprintf( ...
+                'TT/session row %d/%d, waveform file %d/%d, unit %d/%d, TT%d sort-file-%02d internal-unit-%d', ...
+                i_tt, size(tt_table, 1), i_file, nFilesThisTT, ...
+                i_unit, numel(unitIDsThisFile), ttNumForProgress, ...
+                sortedNumForProgress, targetUnitID);
+            fprintf('%s\n', unitProgressText);
+
+            [rawRFmap, uniXPos, uniYPos, meanXYpos, RFmapTable_allSti, SpikeRate_Baseline] = ...
+                RFMappingFunction_Lo(tt_table, i_tt, i_file, unitProgressText, targetUnitID);
+
+            temp_table = tt_table(i_tt, :);
+            temp_table.Names = tt_table.Names{i_tt}(i_file);
+            temp_table.SessionIndex = i_tt;
+            temp_table.FileIndex = i_file;
+            temp_table.UnitIndex = i_unit;
+            temp_table.InternalUnitID = targetUnitID;
+
+            [ttNum, sortedNum] = parseSparseNoiseUnitName(temp_table.Names{1});
+            temp_table.TTNum = ttNum;
+            temp_table.SortedNum = sortedNum;
+
+            temp_table.rawRFmap = {rawRFmap};
+            temp_table.uniXPos = {uniXPos};
+            temp_table.uniYPos = {uniYPos};
+            temp_table.meanXYpos = {meanXYpos};
+            temp_table.FRbyTrial = {RFmapTable_allSti};
+            temp_table.Baseline = {SpikeRate_Baseline};
+
+            unit_table = [unit_table; temp_table];
+        end
     end
+end
+
+%% Transform RF position coordinates from pixels into mm and deg.
+windowWidth = 1920; %(pixels)
+windowHeight = 1080; %(pixels)
+viewingDistance = 570; %(mm)
+ScreenWidth = 635; %(mm)
+ScreenHeight = 358; %(mm)
+mm2deg = @(x) atand(x./viewingDistance);
+pix2mm = @(x) x.*ScreenWidth./windowWidth;
+pix2deg = @(x) mm2deg(pix2mm(x));
+
+for i_unit = 1:size(unit_table, 1)
+    XPos_pix = unit_table.uniXPos{i_unit};
+    YPos_pix = unit_table.uniYPos{i_unit};
+    meanXYpos_pix = unit_table.meanXYpos{i_unit};
+
+    unit_table.XPos_mm{i_unit} = pix2mm(XPos_pix);
+    unit_table.YPos_mm{i_unit} = pix2mm(YPos_pix);
+    unit_table.meanXYpos_mm{i_unit} = pix2mm(meanXYpos_pix);
+
+    unit_table.XPos_deg{i_unit} = pix2deg(XPos_pix - windowWidth/2);
+    unit_table.YPos_deg{i_unit} = pix2deg(-YPos_pix + windowHeight/2);
+    unit_table.meanXYpos_deg{i_unit} = pix2deg([ ...
+        meanXYpos_pix(:, 1) - windowWidth/2, ...
+        -meanXYpos_pix(:, 2) + windowHeight/2]);
+end
+
+RF_table = unit_table;
+save('LoRF_unit_table', 'unit_table', 'RF_table', 'tt_table');
+
+function [ttNum, sortedNum] = parseSparseNoiseUnitName(fileName)
+tok = regexp(fileName, 'tt(\d+).*sorted-(\d+)', 'tokens', 'once');
+if isempty(tok)
+    ttNum = NaN;
+    sortedNum = NaN;
+else
+    ttNum = str2double(tok{1});
+    sortedNum = str2double(tok{2});
+end
+end
+
+function unitIDs = getWaveformUnitIDs(pathName, fileName)
+S = load(string(fullfile(pathName, fileName)));
+if isfield(S, 'Raw1')
+    RawSpikes = S.Raw1;
+else
+    vars = fieldnames(S);
+    RawSpikes = S.(vars{1});
+end
+unitIDs = unique(RawSpikes(:, 2));
+unitIDs(unitIDs == 0) = [];
+unitIDs = unitIDs(:)';
 end
