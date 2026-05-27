@@ -1,0 +1,25 @@
+[Warning: Column headers from the file were modified to make them valid MATLAB identifiers before creating variable names for the table. The original column headers are saved in
+the VariableDescriptions property.
+Set 'VariableNamingRule' to 'preserve' to use the original column headers as table variable names.] 
+Error writing to output stream.
+iostream stream error
+Error using matlab.io.ImportOptions/readtable (line 504)
+Error writing to output stream.
+iostream stream error
+
+
+Error in PlotClayHoleTrajectoriesMRI>loadRecordingTableLocal (line 135)
+tb = readtable(xls_table, opts);
+     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error in PlotClayHoleTrajectoriesMRI (line 42)
+    tb = loadRecordingTableLocal(xls_tables{t});
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error using char
+Conversion of element 1 from <missing> to character vector is not supported.
+
+Error in PlotClayHoleTrajectoriesMRI>parseHoleColumn (line 149)
+    parsedHole = str2num(char(holeText)); %#ok<ST2NM>
+                         ^^^^^^^^^^^^^^
+Error in PlotClayHoleTrajectoriesMRI (line 43)
+    holes = [holes; parseHoleColumn(tb.Hole)]; %#ok<AGROW>
+                    ^^^^^^^^^^^^^^^^^^^^^^^^

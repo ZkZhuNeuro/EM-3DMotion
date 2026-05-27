@@ -1,0 +1,44 @@
+Top-level fields:
+- FRMap | class=double | size=[25 59]
+  first rows/cols:
+   NaN NaN NaN NaN NaN NaN 
+   NaN NaN NaN NaN NaN NaN 
+   NaN NaN NaN NaN NaN NaN 
+   NaN NaN NaN NaN NaN NaN 
+   NaN NaN NaN NaN NaN NaN 
+- HPos | class=double | size=[4866 1]
+  first rows/cols:
+   389.268 
+   538.096 
+   552.979 
+   493.448 
+   329.737 
+- VPos | class=double | size=[4866 1]
+  first rows/cols:
+   201.209 
+   290.709 
+   37.1259 
+   305.626 
+   22.2093 
+- TPos | class=double | size=[4866 1]
+  first rows/cols:
+   12.6324 
+   12.7824 
+   12.9488 
+   15.9244 
+   16.0658 
+- Dura | class=double | size=[1 9732]
+  first rows/cols:
+   0.1307 0.1307 0.139633 0.139633 0.134667 0.134667 
+- HBinSize | class=double | size=[1 1]
+  first rows/cols:
+   14.8828 
+- VBinSize | class=double | size=[1 1]
+  first rows/cols:
+   14.9167 
+- DuraGrid_V | class=double | size=[1 25]
+  first rows/cols:
+   14.7509 29.6676 44.5843 59.5009 74.4176 89.3343 
+- DuraGrid_H | class=double | size=[1 59]
+  first rows/cols:
+   9.75651 24.6393 39.5221 54.4049 69.2878 84.1706 

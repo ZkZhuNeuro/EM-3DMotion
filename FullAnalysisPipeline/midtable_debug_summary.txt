@@ -1,0 +1,27 @@
+MIDTable rows: 2
+Skipped rows: 0
+
+Row 1
+  Monkey: Jim
+  Date: 2021-07-14
+  ROI: MT
+  StimElec: 1
+  FolderPath: P:\Jim\NeuroData\20210714
+  Paths: P:\Jim\NeuroData\20210714\
+  StimPair: Jim_MT_14July2021_MUA_3DMotionStim_TInfo.mat | Jim_MT_14July2021_MUA_3DMotionStim_SelIndex.mat
+  QuickPair: Jim_MT_14July2021_SparseNoise-3DQuick_mrg_MUA_3DMotionQuick_TInfo.mat | Jim_MT_14July2021_SparseNoise-3DQuick_mrg_MUA_3DMotionQuick_SelIndex.mat
+  2DTag: LateralMotion
+  2DPair: Jim_MT_14July2021_SparseNoise-3DQuick_mrg_MUA_LateralMotion_TInfo.mat | Jim_MT_14July2021_SparseNoise-3DQuick_mrg_MUA_LateralMotion_SelIndex.mat
+
+Row 2
+  Monkey: Clay
+  Date: 2024-07-16
+  ROI: FST
+  StimElec: 4
+  FolderPath: P:\Clay\NeuroData\20240716
+  Paths: P:\Clay\NeuroData\20240716\
+  StimPair: Clay_FST_16Jul2024_3DMotionStim_MUA_TInfo.mat | Clay_FST_16Jul2024_3DMotionStim_MUA_SelIndex.mat
+  QuickPair: Clay_FST_16Jul2024_SparseNoise-3DMotionQuick_mrg_MUA_3DMotionQuick_TInfo.mat | Clay_FST_16Jul2024_SparseNoise-3DMotionQuick_mrg_MUA_3DMotionQuick_SelIndex.mat
+  2DTag: 2DMotion
+  2DPair: Clay_FST_16Jul2024_SparseNoise-3DMotionQuick_mrg_MUA_2DMotionQuick_TInfo.mat | Clay_FST_16Jul2024_SparseNoise-3DMotionQuick_mrg_MUA_2DMotionQuick_SelIndex.mat
+

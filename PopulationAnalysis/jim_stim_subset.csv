@@ -1,0 +1,4 @@
+Date,Channels,Hole,Bit,Guide Tube,Depth,ROI,Offset,StimElec,Converted,Merged,MUA,MUAStim,Clustered,Applied Cluster,Initial Sorts,Final Sorts,Stimulus Location,Sprase Noise Time,2D Time,End 2D Time,3D Quick Time,Summed Time,Notes,WF,RF,In RF,Separate2D,2D Tuning,3D Tuning,R01_Renewal,SFN abstract,DeadChannel,Area_Ari_20230805,Comment_20240701,WorkbookRow
+07-Feb-2025,16,"[17,22]",26,27,10.7,FST,"[0,0,0]",15,,,,,,,,,"[6.5,3]",NaN,NaN,NaN,NaN,NaN,,NaN,NaN,NaN,,NaN,NaN,,,,,,215
+11-Feb-2025,16,"[18,23]",26,27,12.3,FST,"[0,0,0]",11,,,,,,,,,"[3,4.4]",NaN,NaN,NaN,NaN,NaN,,NaN,NaN,NaN,,NaN,NaN,,,,,,216
+13-Feb-2025,16,"[21,24]",26,27,13.5,FST,"[0,0,0]",3,,,,,,,,,"[1.2,-0.9]",NaN,NaN,NaN,NaN,NaN,,NaN,NaN,NaN,,NaN,NaN,,,,,,218

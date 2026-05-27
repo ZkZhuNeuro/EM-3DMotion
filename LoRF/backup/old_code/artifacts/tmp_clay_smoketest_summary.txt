@@ -1,0 +1,2 @@
+Picked waveform file: Clay_FST_03August2021_TT1_mrg_Sorted-02_SparseNoise_1_1.mat
+Parsed TT=1 sorted=2 unitIDs=0.130700000000001 rawRippleIdx=2 nev=SparseNoise0001.nev

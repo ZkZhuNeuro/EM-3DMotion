@@ -1,0 +1,5 @@
+classes: raw=double uniX=double uniY=double meanXY=double
+sizes: raw=[18 31] uniX=[31 1] uniY=[18 1] meanXY=[558 2]
+FIT_OK
+p_fit=[6.30111354109678 19.1207131793577 0.0646204683247656 -0.0130984922802018 0.00711916967046329 15.3993407843791 29.9966943338007]
+within_class=logical size=[18 31]

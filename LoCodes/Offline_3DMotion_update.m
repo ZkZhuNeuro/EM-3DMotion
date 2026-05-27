@@ -562,10 +562,10 @@ for NumT = 1:TrialNum
     % We can build a towards and away response matrix from this pretty
     % easily, the only issue is the 0% coherence. We must specifiy the
     % towards and away responses at 0 %
-    BehaviorData.(NumT).Choice = AnaData(NumT).Choice;
-    BehaviorData.ConditionNum(NumT) = ConditionNum;
-    BehaviorData.CoherenceNum(NumT) = CoherenceNum;
-    BehaviorData.Block(NumT) = Block;
+    BehaviorData(NumT).Choice = AnaData(NumT).Choice;
+    BehaviorData(NumT).ConditionNum = ConditionNum;
+    BehaviorData(NumT).CoherenceNum = CoherenceNum;
+    BehaviorData(NumT).Block = Block;
 end
 AnaData(invalid) = [];
 
@@ -820,28 +820,40 @@ if plotFlag
         
         %     line(xRange, ones(length(xRange),1)*0.5,'LineStyle','--','Color',[0.6 0.6 0.6]);
         
-        for cond=1:6
-            %         subplot(1,4,cond); hold off;
-            if ~baselineSubtract
-                p(cond) = plot(ax,CoherenceArray',squeeze(mean_FR(unit_num,cond,:))','o','MarkerFaceColor',colorsteps(cond,:),'MarkerEdgeColor','none');
-                errorbar(ax,CoherenceArray',squeeze(mean_FR(unit_num,cond,:))',squeeze(sem_FR(unit_num,cond,:))','Color',colorsteps(cond,:));
-            else
-                p(cond) = plot(ax,CoherenceArray',squeeze(mean_FR(unit_num,cond,:))' - baseline_mean_FR(unit_num),'o','MarkerFaceColor',colorsteps(cond,:),'MarkerEdgeColor','none');
-                errorbar(ax,CoherenceArray',squeeze(mean_FR(unit_num,cond,:))'-baseline_mean_FR(unit_num),squeeze(sem_FR(unit_num,cond,:))','Color',colorsteps(cond,:));
+        plotConditionIdx = 1:4;
+        plotConditionNames = {'Combined', 'L Mono', 'R Mono', 'Stereo'};
+        p = gobjects(1, numel(plotConditionIdx));
+
+        for plotIdx = 1:numel(plotConditionIdx)
+            cond = plotConditionIdx(plotIdx);
+            xVals = CoherenceArray';
+            yVals = squeeze(mean_FR(unit_num,cond,:))';
+            yErr = squeeze(sem_FR(unit_num,cond,:))';
+
+            if baselineSubtract
+                yVals = yVals - baseline_mean_FR(unit_num);
             end
-            %         line(zeros(length(xRange),1),linspace(0,max(squeeze(mean_FR(u,cond,:))),length(xRange)),'LineStyle','--','Color',[0.6 0.6 0.6]);
-            
+
+            fill(ax, [xVals; flipud(xVals)], ...
+                [yVals + yErr, fliplr(yVals - yErr)]', ...
+                colorsteps(cond,:), ...
+                'FaceAlpha', 0.2, ...
+                'EdgeColor', 'none', ...
+                'HandleVisibility', 'off');
+
+            p(plotIdx) = plot(ax, xVals, yVals, '-', ...
+                'Color', [colorsteps(cond,:), 0.8], ...
+                'LineWidth', subplotLineWidth, ...
+                'Marker', 'none');
         end
+
         if ~baselineSubtract
             plot(ax,[-1,1], [baseline_mean_FR(unit_num),baseline_mean_FR(unit_num)], '--k');
-            p(end+1) = plot(ax,CoherenceArray',squeeze(weighted_all(unit_num,:))','-o','Color','y','MarkerFaceColor','y','MarkerEdgeColor','none');
-            p(end+1) = plot(ax,[-0.95, 0.95], squeeze(weighted_control(unit_num,:))','o','MarkerFaceColor',[0.8500, 0.3250, 0.0980],'MarkerEdgeColor','k');
-        else
-            p(end+1) = plot(ax,CoherenceArray',squeeze(weighted_all(unit_num,:))' - baseline_mean_FR(unit_num),'-o','Color','y','MarkerFaceColor','y','MarkerEdgeColor','none');
-            p(end+1) = plot(ax,[-0.95, 0.95], squeeze(weighted_control(unit_num,:))'-baseline_mean_FR(unit_num),'o','MarkerFaceColor',[0.8500, 0.3250, 0.0980],'MarkerEdgeColor','k');
         end
         
         ylim('auto');
+        xlim(ax, [-1, 1]);
+        xticks(ax, [-1, -0.5, 0, 0.5, 1]);
         if any(contains(file_names, 'TT'))
             tetrode = extractBetween(file_names{1},'TT','_');
             title(ax,{[string(recordingDate) + ' : TT '+ string(tetrode)], [' Unit ', num2str(unit_num)]});
@@ -850,8 +862,9 @@ if plotFlag
         end
         xlabel(ax,'Coherence');
         ylabel(ax,'Firing Rate');
-        legend(p,conditionNames,'Location','eastoutside')
+        legend(ax, p, plotConditionNames, 'Location', 'eastoutside')
         axis square;
+        box(ax, 'off');
     end
 end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

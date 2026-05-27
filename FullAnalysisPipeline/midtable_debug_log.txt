@@ -1,0 +1,35 @@
+[Warning: Column headers from the file were modified to make them valid MATLAB identifiers before creating variable names for the table. The original column headers are saved in
+the VariableDescriptions property.
+Set 'VariableNamingRule' to 'preserve' to use the original column headers as table variable names.] 
+{Unrecognized function or variable 'sessionLimitPerMonkey'.
+
+Error in BuildMIDTable_MUAStim_JimClay>buildMonkeyMIDTable (line 55)
+if isfinite(sessionLimitPerMonkey)
+            ^^^^^^^^^^^^^^^^^^^^^
+Error in BuildMIDTable_MUAStim_JimClay (line 25)
+    [tmpMIDTable, tmpSkipped] = buildMonkeyMIDTable(configs(iConfig), areas);
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error in run (line 112)
+evalin('caller', strcat(scriptStem, ';'));
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+} 
+[Warning: Column headers from the file were modified to make them valid MATLAB identifiers before creating variable names for the table. The original column headers are saved in
+the VariableDescriptions property.
+Set 'VariableNamingRule' to 'preserve' to use the original column headers as table variable names.] 
+[Warning: Column headers from the file were modified to make them valid MATLAB identifiers before creating variable names for the table. The original column headers are saved in
+the VariableDescriptions property.
+Set 'VariableNamingRule' to 'preserve' to use the original column headers as table variable names.] 
+Built MIDTable with Error writing to output stream.
+iostream stream error
+{Error using fprintf
+Error writing to output stream.
+iostream stream error
+
+
+Error in BuildMIDTable_MUAStim_JimClay (line 33)
+    fprintf('Built MIDTable with %d session rows.\n', size(MIDTable, 1));
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error in run (line 112)
+evalin('caller', strcat(scriptStem, ';'));
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+} 

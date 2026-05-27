@@ -1,0 +1,45 @@
+Top-level fields:
+- FName | class=char | size=[1 55]
+- PathName | class=char | size=[1 31]
+- SpkChNum | class=double | size=[1 1]
+  first rows/cols:
+   4 
+- SpkCh | class=double | size=[1 4]
+  first rows/cols:
+   1 2 3 4 
+- Units | class=double | size=[4 4]
+  first rows/cols:
+   0 1 2 3 
+   0 1 2 3 
+   0 1 2 3 
+   0 1 2 3 
+- UnitNum | class=double | size=[1 4]
+  first rows/cols:
+   4 4 4 4 
+- UnitT | class=double | size=[4 4 39343]
+- StimWidth | class=double | size=[1 1]
+  first rows/cols:
+   14.8828 
+- StimHeight | class=double | size=[1 1]
+  first rows/cols:
+   14.9167 
+- XPos | class=double | size=[0 0]
+  first rows/cols:
+- YPos | class=double | size=[0 0]
+  first rows/cols:
+- EIDs | class=double | size=[52784 1]
+  first rows/cols:
+   111 
+   113 
+   114 
+   116 
+   113 
+- EventTs | class=double | size=[52784 1]
+  first rows/cols:
+   9.5049 
+   9.54263 
+   9.78783 
+   9.94133 
+   11.9681 
+- StimType | class=double | size=[0 0]
+  first rows/cols:

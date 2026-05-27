@@ -1,0 +1,9 @@
+status=OK
+threshold_nnz=4
+clean_nnz=4
+center90=89.9932 -89.9942
+center68=89.9932 -89.9942
+xrange90=-89.9874 89.9973
+yrange90=-89.9975 89.9814
+xrange68=-89.9874 89.9973
+yrange68=-89.9975 89.9814

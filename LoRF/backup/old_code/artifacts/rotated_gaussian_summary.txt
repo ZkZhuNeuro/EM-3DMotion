@@ -1,0 +1,15 @@
+Input file: C:/LoData/RF/LoRF_unit_table_with_old_gaussian_compare.mat
+Rows: 685
+Has Hole: 1
+Hole first-element valid rows: 685
+Hole first-element all < 0: 1
+Hole first-element >= 0 count: 0
+Hole first-element min/max: -22 / -15
+Has rotated-fit fields: accepted=1 x=1 center=1
+Accepted rotated fits: 542
+Cross x>2 count among accepted: 231
+Cross x>2 proportion among accepted: 0.426199
+Center x>2 count among accepted: 27
+Center x>2 proportion among accepted: 0.049815
+Cross x>2 proportion among all rows: 0.337226
+Center x>2 proportion among all rows: 0.039416
