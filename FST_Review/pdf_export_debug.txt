@@ -1,0 +1,63 @@
+[Warning: Placed 85 of 200 requested dots. Reduce nDots, reduce minProjectedDotSpacing, or increase maxPlacementAttempts.] 
+[> In rotate_dotted_cylinder_3d_animation>generateSeparatedCylinderDots (line 254)
+In rotate_dotted_cylinder_3d_animation (line 56)] 
+Saved 2D projection PDF: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\FST_Review\rotating_dotted_cylinder_2d_projection_pdfs\dotted_cylinder_2d_projection_000deg.pdf
+Saved 2D projection PDF: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\FST_Review\rotating_dotted_cylinder_2d_projection_pdfs\dotted_cylinder_2d_projection_030deg.pdf
+Saved 2D projection PDF: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\FST_Review\rotating_dotted_cylinder_2d_projection_pdfs\dotted_cylinder_2d_projection_060deg.pdf
+Saved 2D projection PDF: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\FST_Review\rotating_dotted_cylinder_2d_projection_pdfs\dotted_cylinder_2d_projection_090deg.pdf
+Saved 2D projection PDF: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\FST_Review\rotating_dotted_cylinder_2d_projection_pdfs\dotted_cylinder_2d_projection_120deg.pdf
+Saved 2D projection PDF: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\FST_Review\rotating_dotted_cylinder_2d_projection_pdfs\dotted_cylinder_2d_projection_150deg.pdf
+Saved 2D projection PDF: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\FST_Review\rotating_dotted_cylinder_2d_projection_pdfs\dotted_cylinder_2d_projection_180deg.pdf
+Saved 2D projection PDF: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\FST_Review\rotating_dotted_cylinder_2d_projection_pdfs\dotted_cylinder_2d_projection_210deg.pdf
+Saved 2D projection PDF: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\FST_Review\rotating_dotted_cylinder_2d_projection_pdfs\dotted_cylinder_2d_projection_240deg.pdf
+Saved 2D projection PDF: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\FST_Review\rotating_dotted_cylinder_2d_projection_pdfs\dotted_cylinder_2d_projection_270deg.pdf
+Saved 2D projection PDF: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\FST_Review\rotating_dotted_cylinder_2d_projection_pdfs\dotted_cylinder_2d_projection_300deg.pdf
+Saved 2D projection PDF: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\FST_Review\rotating_dotted_cylinder_2d_projection_pdfs\dotted_cylinder_2d_projection_330deg.pdf
+[Warning: Vectorized content might take a long time to create, or it might contain unexpected results. Set 'ContentType' to 'image' for
+better performance. <a href="matlab:warning('off', 'MATLAB:print:ContentTypeImageSuggested')">Click here</a> to not see this message
+again.] 
+Saved PDF: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\FST_Review\rotating_dotted_cylinder_pdfs\dotted_cylinder_000deg.pdf
+[Warning: Vectorized content might take a long time to create, or it might contain unexpected results. Set 'ContentType' to 'image' for
+better performance. <a href="matlab:warning('off', 'MATLAB:print:ContentTypeImageSuggested')">Click here</a> to not see this message
+again.] 
+Saved PDF: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\FST_Review\rotating_dotted_cylinder_pdfs\dotted_cylinder_030deg.pdf
+[Warning: Vectorized content might take a long time to create, or it might contain unexpected results. Set 'ContentType' to 'image' for
+better performance. <a href="matlab:warning('off', 'MATLAB:print:ContentTypeImageSuggested')">Click here</a> to not see this message
+again.] 
+Saved PDF: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\FST_Review\rotating_dotted_cylinder_pdfs\dotted_cylinder_060deg.pdf
+[Warning: Vectorized content might take a long time to create, or it might contain unexpected results. Set 'ContentType' to 'image' for
+better performance. <a href="matlab:warning('off', 'MATLAB:print:ContentTypeImageSuggested')">Click here</a> to not see this message
+again.] 
+Saved PDF: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\FST_Review\rotating_dotted_cylinder_pdfs\dotted_cylinder_090deg.pdf
+[Warning: Vectorized content might take a long time to create, or it might contain unexpected results. Set 'ContentType' to 'image' for
+better performance. <a href="matlab:warning('off', 'MATLAB:print:ContentTypeImageSuggested')">Click here</a> to not see this message
+again.] 
+Saved PDF: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\FST_Review\rotating_dotted_cylinder_pdfs\dotted_cylinder_120deg.pdf
+[Warning: Vectorized content might take a long time to create, or it might contain unexpected results. Set 'ContentType' to 'image' for
+better performance. <a href="matlab:warning('off', 'MATLAB:print:ContentTypeImageSuggested')">Click here</a> to not see this message
+again.] 
+Saved PDF: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\FST_Review\rotating_dotted_cylinder_pdfs\dotted_cylinder_150deg.pdf
+[Warning: Vectorized content might take a long time to create, or it might contain unexpected results. Set 'ContentType' to 'image' for
+better performance. <a href="matlab:warning('off', 'MATLAB:print:ContentTypeImageSuggested')">Click here</a> to not see this message
+again.] 
+Saved PDF: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\FST_Review\rotating_dotted_cylinder_pdfs\dotted_cylinder_180deg.pdf
+[Warning: Vectorized content might take a long time to create, or it might contain unexpected results. Set 'ContentType' to 'image' for
+better performance. <a href="matlab:warning('off', 'MATLAB:print:ContentTypeImageSuggested')">Click here</a> to not see this message
+again.] 
+Saved PDF: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\FST_Review\rotating_dotted_cylinder_pdfs\dotted_cylinder_210deg.pdf
+[Warning: Vectorized content might take a long time to create, or it might contain unexpected results. Set 'ContentType' to 'image' for
+better performance. <a href="matlab:warning('off', 'MATLAB:print:ContentTypeImageSuggested')">Click here</a> to not see this message
+again.] 
+Saved PDF: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\FST_Review\rotating_dotted_cylinder_pdfs\dotted_cylinder_240deg.pdf
+[Warning: Vectorized content might take a long time to create, or it might contain unexpected results. Set 'ContentType' to 'image' for
+better performance. <a href="matlab:warning('off', 'MATLAB:print:ContentTypeImageSuggested')">Click here</a> to not see this message
+again.] 
+Saved PDF: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\FST_Review\rotating_dotted_cylinder_pdfs\dotted_cylinder_270deg.pdf
+[Warning: Vectorized content might take a long time to create, or it might contain unexpected results. Set 'ContentType' to 'image' for
+better performance. <a href="matlab:warning('off', 'MATLAB:print:ContentTypeImageSuggested')">Click here</a> to not see this message
+again.] 
+Saved PDF: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\FST_Review\rotating_dotted_cylinder_pdfs\dotted_cylinder_300deg.pdf
+[Warning: Vectorized content might take a long time to create, or it might contain unexpected results. Set 'ContentType' to 'image' for
+better performance. <a href="matlab:warning('off', 'MATLAB:print:ContentTypeImageSuggested')">Click here</a> to not see this message
+again.] 
+Saved PDF: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\FST_Review\rotating_dotted_cylinder_pdfs\dotted_cylinder_330deg.pdf
