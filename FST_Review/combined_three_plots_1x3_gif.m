@@ -1,39 +1,34 @@
 % combined_three_plots_1x3_gif.m
 %
-% Draws the rotating frame, point-light walker, and rotating dotted
-% cylinder projection together in one 1x3 layout, then saves one GIF.
+% Draws the rotating wire frame and point-light walker together in one
+% 1x2 layout, then saves one GIF. The cylinder is generated separately by
+% rotating_cylinder_separate_gif.m.
 
 clear;
 clc;
 
 %% User settings
 nFrames = 240;
-gifDelayTime = 0.05;
-gifFile = fullfile(pwd, 'combined_three_plots_1x3.gif');
+gifDelayTime = 0.035;
+gifFile = fullfile(pwd, 'combined_wire_frame_walker_1x2.gif');
 
 frameRotationCycles = 1.0;
-walkerStepCycles = 2.0; % two walking repeats per GIF loop
-cylinderRotationCycles = 1.0;
+walkerStepCycles = 4.0; % twice the previous walker speed
 
 %% Shared figure
 fig = figure('Color', 'w', ...
-    'Name', 'Combined 1x3 Motion GIF', ...
+    'Name', 'Combined Wire Frame and Walker GIF', ...
     'NumberTitle', 'off', ...
-    'Position', [40, 120, 1800, 620]);
+    'Position', [80, 120, 1280, 620]);
 
 axFrame = axes('Parent', fig, ...
     'Units', 'normalized', ...
-    'Position', [0.015, 0.08, 0.31, 0.86], ...
+    'Position', [0.03, 0.08, 0.45, 0.86], ...
     'LooseInset', [0, 0, 0, 0]);
 
 axWalker = axes('Parent', fig, ...
     'Units', 'normalized', ...
-    'Position', [0.345, 0.08, 0.31, 0.86], ...
-    'LooseInset', [0, 0, 0, 0]);
-
-axCylinder = axes('Parent', fig, ...
-    'Units', 'normalized', ...
-    'Position', [0.675, 0.08, 0.31, 0.86], ...
+    'Position', [0.52, 0.08, 0.45, 0.86], ...
     'LooseInset', [0, 0, 0, 0]);
 
 %% Plot 1: rotating frame
@@ -45,10 +40,6 @@ view(axFrame, 38, 22);
 camproj(axFrame, 'perspective');
 camzoom(axFrame, 1.35);
 
-plot3(axFrame, [0, 0], [0, 0], [-2.0, 2.8], ...
-    '--', 'Color', [1.0, 0.05, 0.08], 'LineWidth', 2.2);
-drawRotationArrow(axFrame, 2.35, -1.95, [1.0, 0.05, 0.08]);
-
 frameTransform = hgtransform('Parent', axFrame);
 drawBentFrame(frameTransform);
 
@@ -59,50 +50,25 @@ axis(axWalker, [-1.9, 1.9, 0.0, 4.8]);
 axis(axWalker, 'off');
 
 bodyHorizontalMotion = 0.06;
-bodyVerticalMotion = 0.035;
+bodyVerticalMotion = 0.02;
 bodyLeanMotion = 0.045;
-jointVerticalSeparation = 0.06;
+jointVerticalSeparation = 0.025;
+shoulderHorizontalSeparation = 0.20;
+hipHorizontalSeparation = 0.18;
 dotSizeWalker = 115;
 dotColor = [0, 0, 0];
 showRedDashedLines = false;
 
 pose = getWalkerPose(0, bodyHorizontalMotion, bodyVerticalMotion, ...
-    bodyLeanMotion, jointVerticalSeparation);
+    bodyLeanMotion, jointVerticalSeparation, ...
+    shoulderHorizontalSeparation, hipHorizontalSeparation);
 jointNames = fieldnames(pose.joints);
 [dotX, dotY] = getWalkerJointXY(pose, jointNames);
 lineHandles = gobjects(0);
 dotHandle = scatter(axWalker, dotX, dotY, dotSizeWalker, dotColor, ...
     'filled', 'MarkerEdgeColor', dotColor, 'LineWidth', 0.8);
 
-%% Plot 3: rotating dotted cylinder 2D projection
-hold(axCylinder, 'on');
-axis(axCylinder, 'equal');
-axis(axCylinder, 'off');
-
-cylinderRadius = 1.4;
-cylinderHeight = 3.0;
-nDots = 300;
-dotSizeCylinder = 200;
-cameraAzimuthDeg = 38;
-
-rng(1);
-theta0 = 2*pi*rand(nDots, 1);
-z0 = cylinderHeight * (rand(nDots, 1) - 0.5);
-x0 = cylinderRadius * cos(theta0);
-y0 = cylinderRadius * sin(theta0);
-nx0 = cos(theta0);
-ny0 = sin(theta0);
-
-projectionLimit = 1.12 * max(cylinderRadius, 0.5*cylinderHeight);
-axis(axCylinder, [-projectionLimit, projectionLimit, ...
-    -projectionLimit, projectionLimit]);
-
-[screenX, screenZ] = get2DProjection(0, x0, y0, z0, nx0, ny0, ...
-    cameraAzimuthDeg);
-cylinderDotHandle = scatter(axCylinder, screenX, screenZ, ...
-    dotSizeCylinder, 'k', 'filled');
-
-%% Animate all three plots and write one GIF
+%% Animate both plots and write one GIF
 if exist(gifFile, 'file')
     delete(gifFile);
 end
@@ -115,14 +81,10 @@ for iFrame = 1:nFrames
 
     walkerPhase = 2*pi*walkerStepCycles * normalizedTime;
     pose = getWalkerPose(walkerPhase, bodyHorizontalMotion, ...
-        bodyVerticalMotion, bodyLeanMotion, jointVerticalSeparation);
+        bodyVerticalMotion, bodyLeanMotion, jointVerticalSeparation, ...
+        shoulderHorizontalSeparation, hipHorizontalSeparation);
     updateWalkerPlot(pose, jointNames, dotHandle, lineHandles, ...
         showRedDashedLines);
-
-    cylinderAngleDeg = 360*cylinderRotationCycles * normalizedTime;
-    [screenX, screenZ] = get2DProjection(cylinderAngleDeg, x0, y0, z0, ...
-        nx0, ny0, cameraAzimuthDeg);
-    set(cylinderDotHandle, 'XData', screenX, 'YData', screenZ);
 
     drawnow;
     frame = getframe(fig);
@@ -170,34 +132,6 @@ for iSeg = 1:size(segments, 1)
 end
 end
 
-function drawRotationArrow(ax, radius, zLevel, arrowColor)
-theta = linspace(0, 2*pi, 400);
-x = radius * cos(theta);
-y = radius * sin(theta);
-z = zLevel * ones(size(theta));
-plot3(ax, x, y, z, '-', 'Color', arrowColor, 'LineWidth', 2.0);
-
-drawTangentArrowhead(ax, radius, zLevel, deg2rad(72), arrowColor);
-drawTangentArrowhead(ax, radius, zLevel, deg2rad(252), arrowColor);
-end
-
-function drawTangentArrowhead(ax, radius, zLevel, theta, arrowColor)
-tip = [radius*cos(theta), radius*sin(theta), zLevel];
-tangent = [-sin(theta), cos(theta), 0];
-radial = [cos(theta), sin(theta), 0];
-
-headLength = 0.34;
-headSpread = 0.18;
-baseCenter = tip - headLength * tangent;
-p1 = baseCenter + headSpread * radial;
-p2 = baseCenter - headSpread * radial;
-
-plot3(ax, [tip(1), p1(1)], [tip(2), p1(2)], [tip(3), p1(3)], ...
-    '-', 'Color', arrowColor, 'LineWidth', 2.0);
-plot3(ax, [tip(1), p2(1)], [tip(2), p2(2)], [tip(3), p2(3)], ...
-    '-', 'Color', arrowColor, 'LineWidth', 2.0);
-end
-
 %% Local functions: point-light walker
 function updateWalkerPlot(pose, jointNames, dotHandle, lineHandles, ...
     showRedDashedLines)
@@ -229,7 +163,8 @@ end
 end
 
 function pose = getWalkerPose(phase, bodyHorizontalMotion, ...
-    bodyVerticalMotion, bodyLeanMotion, jointVerticalSeparation)
+    bodyVerticalMotion, bodyLeanMotion, jointVerticalSeparation, ...
+    shoulderHorizontalSeparation, hipHorizontalSeparation)
 phase = mod(phase, 2*pi);
 
 bodyX = bodyHorizontalMotion * sin(phase - 0.2*pi);
@@ -239,21 +174,29 @@ bodyLean = bodyLeanMotion * sin(phase + 0.15*pi);
 spine = [bodyX + 0.35*bodyLean, 2.65 + bodyY];
 neck = [bodyX + bodyLean, 3.55 + bodyY];
 head = [bodyX + 1.15*bodyLean, 4.02 + bodyY];
+shoulderCenter = [bodyX + 0.85*bodyLean, 3.35 + bodyY];
+hipCenter = [bodyX + 0.25*bodyLean, 2.55 + bodyY];
 
-leftLeg = limbPose(spine, phase, true);
-rightLeg = limbPose(spine, phase + pi, true);
-leftArm = limbPose(neck, phase + pi, false);
-rightArm = limbPose(neck, phase, false);
+leftShoulder = shoulderCenter + ...
+    [-shoulderHorizontalSeparation, jointVerticalSeparation];
+rightShoulder = shoulderCenter + ...
+    [shoulderHorizontalSeparation, -jointVerticalSeparation];
+leftHip = hipCenter + [-hipHorizontalSeparation, jointVerticalSeparation];
+rightHip = hipCenter + [hipHorizontalSeparation, -jointVerticalSeparation];
 
-leftLeg.middle(2) = leftLeg.middle(2) + jointVerticalSeparation;
-rightLeg.middle(2) = rightLeg.middle(2) - jointVerticalSeparation;
-leftArm.middle(2) = leftArm.middle(2) + jointVerticalSeparation;
-rightArm.middle(2) = rightArm.middle(2) - jointVerticalSeparation;
+leftLeg = limbPose(leftHip, phase, true);
+rightLeg = limbPose(rightHip, phase + pi, true);
+leftArm = limbPose(leftShoulder, phase + pi, false);
+rightArm = limbPose(rightShoulder, phase, false);
 
 joints = struct();
 joints.head = head;
 joints.neck = neck;
 joints.spine = spine;
+joints.leftShoulder = leftShoulder;
+joints.rightShoulder = rightShoulder;
+joints.leftHip = leftHip;
+joints.rightHip = rightHip;
 joints.leftElbow = leftArm.middle;
 joints.rightElbow = rightArm.middle;
 joints.leftWrist = leftArm.endPoint;
@@ -265,14 +208,18 @@ joints.rightAnkle = rightLeg.endPoint;
 
 segments = {
     'head', 'neck'
-    'neck', 'spine'
-    'spine', 'leftKnee'
-    'spine', 'rightKnee'
-    'neck', 'leftElbow'
+    'neck', 'leftShoulder'
+    'neck', 'rightShoulder'
+    'leftShoulder', 'leftElbow'
     'leftElbow', 'leftWrist'
-    'neck', 'rightElbow'
+    'rightShoulder', 'rightElbow'
     'rightElbow', 'rightWrist'
+    'neck', 'spine'
+    'spine', 'leftHip'
+    'spine', 'rightHip'
+    'leftHip', 'leftKnee'
     'leftKnee', 'leftAnkle'
+    'rightHip', 'rightKnee'
     'rightKnee', 'rightAnkle'
     };
 
@@ -285,8 +232,8 @@ if isLeg
     upperLength = 0.92;
     lowerLength = 0.88;
     baseAngle = -pi/2;
-    swingAmplitude = 0.78;
-    flexAmplitude = 0.78;
+    swingAmplitude = 0.58;
+    flexAmplitude = 0.56;
 
     thighAngle = baseAngle + swingAmplitude * sin(phase);
     kneeFlex = 0.16 + flexAmplitude * max(0, sin(phase + 0.25*pi));
@@ -299,8 +246,8 @@ else
     upperLength = 0.64;
     lowerLength = 0.62;
     baseAngle = -pi/2;
-    swingAmplitude = 0.62;
-    flexAmplitude = 0.34;
+    swingAmplitude = 0.46;
+    flexAmplitude = 0.25;
 
     upperAngle = baseAngle + swingAmplitude * sin(phase);
     elbowFlex = 0.24 + flexAmplitude * ...
@@ -311,33 +258,4 @@ else
     limb.endPoint = limb.middle + lowerLength * ...
         [cos(forearmAngle), sin(forearmAngle)];
 end
-end
-
-%% Local functions: rotating dotted cylinder 2D projection
-function [screenX, screenZ] = get2DProjection(angleDeg, x0, y0, z0, ...
-    nx0, ny0, cameraAzimuthDeg)
-[x, y, z] = rotateCylinderPoints(angleDeg, x0, y0, z0, nx0, ny0);
-
-cameraDirection = [cosd(cameraAzimuthDeg), sind(cameraAzimuthDeg)];
-screenRight = [cameraDirection(2), -cameraDirection(1)];
-screenRight = screenRight ./ norm(screenRight);
-
-screenX = x .* screenRight(1) + y .* screenRight(2);
-screenZ = z;
-end
-
-function [x, y, z, nx, ny] = rotateCylinderPoints(angleDeg, ...
-    x0, y0, z0, nx0, ny0)
-angleRad = deg2rad(angleDeg);
-rotMat = [cos(angleRad), -sin(angleRad); ...
-          sin(angleRad),  cos(angleRad)];
-
-xy = rotMat * [x0'; y0'];
-normalXY = rotMat * [nx0'; ny0'];
-
-x = xy(1, :)';
-y = xy(2, :)';
-z = z0;
-nx = normalXY(1, :)';
-ny = normalXY(2, :)';
 end

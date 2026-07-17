@@ -37,6 +37,11 @@ save_figures = true;
 if ~isempty(varargin)
     save_figures = varargin{1};
 end
+if ~save_figures
+    originalFigureVisible = get(groot, 'defaultFigureVisible');
+    figureVisibilityCleanup = onCleanup(@() set(groot, 'defaultFigureVisible', originalFigureVisible)); %#ok<NASGU>
+    set(groot, 'defaultFigureVisible', 'off');
+end
 if strcmp(Monkey, 'Jim')
     save_location = 'C:\Jim\StimData';
 elseif strcmp(Monkey, 'Clay')
@@ -107,6 +112,9 @@ if reanalyze || ~ismember(recording_date,saved_files) % Can't load data if it ha
     fprintf('\nCalculating Properties...\n')
     [CI, AI, Monocularity, Eye, Eye_AI] = ClusteringIndex_v1_082321(Neuro,LFP_Data,stim_elec); % AI(condition x channel#); NOTE CHANNEL NUMBER HAS NOTHING TO DO WITH LOCATION ON THE EL, just an index
     fprintf('Finished property calculations in %.1f s\n', toc(st));
+    if ~save_figures
+        close all;
+    end
     % Save the AI over distance plot
     if save_figures
         f = gcf;

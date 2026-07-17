@@ -1,0 +1,21 @@
+N sessions nonStim=151 Stim=151
+session 1 nonStim class=struct size=[1 4] stim class=struct size=[1 4]
+ first cue fields: Fit, options, data, conf_Intervals
+ data size=[13 3] first rows:
+[-1 1 10;-0.63636 0 10;-0.45455 0 10;-0.36364 0 10;-0.18182 0 11;-0.090909 2 10;0 5 10;0.090909 7 10]
+session 2 nonStim class=struct size=[1 4] stim class=struct size=[1 4]
+ first cue fields: Fit, options, data, conf_Intervals
+ data size=[13 3] first rows:
+[-1 0 12;-0.63636 0 11;-0.45455 1 12;-0.36364 0 12;-0.18182 3 12;-0.090909 8 13;0 5 11;0.090909 8 12]
+session 3 nonStim class=struct size=[1 4] stim class=struct size=[1 4]
+ first cue fields: Fit, options, data, conf_Intervals
+ data size=[13 3] first rows:
+[-1 0 11;-0.63636 0 12;-0.45455 0 11;-0.36364 0 12;-0.18182 0 12;-0.090909 1 12;0 4 12;0.090909 4 11]
+session 4 nonStim class=struct size=[1 4] stim class=struct size=[1 4]
+ first cue fields: Fit, options, data, conf_Intervals
+ data size=[13 3] first rows:
+[-1 0 10;-0.63636 0 11;-0.45455 0 11;-0.36364 0 11;-0.18182 1 11;-0.090909 3 10;0 6 11;0.090909 7 10]
+session 5 nonStim class=struct size=[1 4] stim class=struct size=[1 4]
+ first cue fields: Fit, options, data, conf_Intervals
+ data size=[13 3] first rows:
+[-1 0 11;-0.63636 0 11;-0.45455 0 11;-0.36364 0 12;-0.18182 5 11;-0.090909 6 11;0 3 11;0.090909 7 11]

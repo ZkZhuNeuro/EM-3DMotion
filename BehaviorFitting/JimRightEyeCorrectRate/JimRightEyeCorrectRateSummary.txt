@@ -1,0 +1,25 @@
+Jim right-eye correct-rate comparison
+Generated: 17-Jul-2026 11:13:46
+Behavior file: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\BehaviorFitting\BehaviorData_Jim.mat
+Output directory: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\BehaviorFitting\JimRightEyeCorrectRate
+Analyzed blocks: nonStim
+Condition order: Combined, MonoL, MonoR, Bino
+Right-eye condition: MonoR
+Zero-coherence trials excluded from correct-rate calculations.
+
+Block: nonStim
+  Sessions with at least one valid condition: 151
+  Combined: N sessions=151, pooled correct rate=0.9163 (17709/19326)
+  MonoL: N sessions=151, pooled correct rate=0.8115 (15683/19325)
+  MonoR: N sessions=151, pooled correct rate=0.7648 (14852/19419)
+  Bino: N sessions=151, pooled correct rate=0.8492 (16433/19352)
+
+Paired stats:
+  nonStim MonoR - Combined: N=151, mean diff=-0.15045, t-test p=1.954e-61, signrank p=1.575e-26
+  nonStim MonoR - MonoL: N=151, mean diff=-0.04567, t-test p=3.603e-09, signrank p=1.1279e-08
+  nonStim MonoR - Bino: N=151, mean diff=-0.08276, t-test p=7.1313e-35, signrank p=1.0068e-24
+
+Mixed model summary:
+  nonStim MonoR vs Combined: right-eye log-odds estimate=-3.03996, p=8.9824e-210; interaction p=2.1829e-90
+  nonStim MonoR vs MonoL: right-eye log-odds estimate=-0.46350, p=1.0328e-36; interaction p=7.4929e-08
+  nonStim MonoR vs Bino: right-eye log-odds estimate=-0.68785, p=1.0354e-72; interaction p=0.070033

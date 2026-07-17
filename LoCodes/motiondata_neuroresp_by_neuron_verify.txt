@@ -1,0 +1,10 @@
+Rows: 1210
+Variables: SourceRow, Name, ROI, StimLoc, Monkey, TT, Unit, OriginalNeuronIndex, OriginalRepeatCount, KeptRepeatCount, MetadataUnits, UnitSource, NeuroResp, NeuroRespSize
+First row: Monkey=Jim ROI=MT TT=NaN Unit=2 Size=[4 13 26]
+Last row: Monkey=Clay ROI=FST TT=8 Unit=3 Size=[4 13 21]
+Bad shape rows: 0
+Rows with all-NaN repeats remaining: 0
+UnitSource NeuroRespIndex: 716 rows
+UnitSource files.Units: 494 rows
+Monkey Clay: 501 rows
+Monkey Jim: 709 rows

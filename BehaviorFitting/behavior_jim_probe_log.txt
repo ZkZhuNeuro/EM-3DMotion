@@ -1,0 +1,10 @@
+  Name                                 Size              Bytes  Class    Attributes
+
+  BehaviorData_Stim_pFit_all         151x1             3817160  cell               
+  BehaviorData_nonStim_pFit_all      151x1             3828032  cell               
+
+  Name                                 Size              Bytes  Class    Attributes
+
+  BehaviorData_Stim_pFit_all         151x1             3817160  cell               
+  BehaviorData_nonStim_pFit_all      151x1             3828032  cell               
+

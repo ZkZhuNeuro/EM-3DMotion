@@ -1,0 +1,7 @@
+N rows total: 251
+Clay FST all rows: Error writing to output stream.
+iostream stream error
+{Error using fprintf
+Error writing to output stream.
+iostream stream error
+} 

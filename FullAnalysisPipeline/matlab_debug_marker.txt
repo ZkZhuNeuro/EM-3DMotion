@@ -1,9 +1,0 @@
-Error using save
-Variable 'AI' not found.
-
-Error in RunStimulationMIDAnalysis_JimClay (line 122)
-    save(analysisOutputPath, 'MIDTable', 'SkippedSessions', 'FailedSessions', 'AnalysisIssueTable', ...
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Error in run (line 112)
-evalin('caller', strcat(scriptStem, ';'));
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

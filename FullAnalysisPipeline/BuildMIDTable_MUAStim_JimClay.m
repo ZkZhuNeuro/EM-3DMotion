@@ -11,7 +11,7 @@ outputSavePath = 'C:\EM\MIDTable_MUAStim_JimClay.mat';
 configs = struct( ...
     'Monkey', {'Jim', 'Clay'}, ...
     'ExcelPath', { ...
-        'P:\Jim\NeuroData\RecordingRecord_Stimulation_20250331.xlsx', ...
+        'P:\Jim\NeuroData\RecordingRecord_Stimulation_final.xlsx', ...
         'P:\Clay\NeuroData\RecordingRecord_Stimulation.xlsx'}, ...
     'PathOptions', { ...
         {'P:\Jim\NeuroData\', 'C:\Jim\In_Processing\'}, ...
@@ -110,6 +110,12 @@ for iRow = 1:numel(rowIdx)
     tempTable.Names_2D = twoDPair;
     tempTable.NChannels = getScalarDouble(getNumericValue(tb, spreadsheetRow, 'Channels'));
     tempTable.StimElec = getScalarDouble(getNumericValue(tb, spreadsheetRow, 'StimElec'));
+    roiReviewValue = getOptionalTextValue(tb, spreadsheetRow, 'Area_Ari_20230805');
+    if isempty(roiReviewValue)
+        roiReviewValue = tempTable.ROI{1};
+    end
+    tempTable.ROI_review = {roiReviewValue};
+    tempTable.DeadChannel = {parseNumericVector(getOptionalTextValue(tb, spreadsheetRow, 'DeadChannel'))};
     tempTable.Analysis2DTag = {twoDTag};
     tempTable.Separate2D = {separate2DValue};
     tempTable.WorkbookPath = {config.ExcelPath};
@@ -245,7 +251,19 @@ pair = {};
 
 names = {folderFiles.name};
 lowerNames = lower(string(names));
-tagMask = contains(lowerNames, lower(fileTag));
+lowerTag = lower(fileTag);
+
+if strcmpi(fileTag, '3DMotionQuick')
+    matchText = getFileTagSearchText(lowerNames);
+    tagMask = contains(matchText, lowerTag) & ~contains(matchText, '2dmotion');
+    hasTInfo = any(tagMask & contains(lowerNames, 'tinfo'));
+    hasSelIndex = any(tagMask & contains(lowerNames, 'selindex'));
+    if ~hasTInfo || ~hasSelIndex
+        tagMask = contains(lowerNames, lowerTag) & ~contains(lowerNames, '2dmotion');
+    end
+else
+    tagMask = contains(lowerNames, lowerTag);
+end
 
 tinfoCandidates = folderFiles(tagMask & contains(lowerNames, 'tinfo'));
 selIndexCandidates = folderFiles(tagMask & contains(lowerNames, 'selindex'));
@@ -257,6 +275,18 @@ end
 bestTInfo = pickBestFile(tinfoCandidates, fileTag);
 bestSelIndex = pickBestFile(selIndexCandidates, fileTag);
 pair = {bestTInfo.name, bestSelIndex.name};
+end
+
+function matchText = getFileTagSearchText(lowerNames)
+matchText = lowerNames;
+
+for iName = 1:numel(lowerNames)
+    nameText = char(lowerNames(iName));
+    muaIdx = strfind(nameText, 'mua');
+    if ~isempty(muaIdx)
+        matchText(iName) = string(nameText(muaIdx(end):end));
+    end
+end
 end
 
 function bestFile = pickBestFile(fileInfo, fileTag)
@@ -482,6 +512,17 @@ if isempty(value)
         value = [];
     end
 end
+end
+
+function numericValues = parseNumericVector(textValue)
+numericValues = [];
+
+if isempty(textValue)
+    return
+end
+
+cleanText = regexprep(char(string(textValue)), '[,;]', ' ');
+numericValues = sscanf(cleanText, '%f').';
 end
 
 function scalarValue = getScalarDouble(value)

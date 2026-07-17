@@ -1,0 +1,165 @@
+% draw_stereokinetic_circles.m
+%
+% Classic stereokinetic illusion stimulus made from alternating black and
+% white filled circles. Each circle has an eccentric center, and all centers
+% rotate about one shared point.
+
+clear;
+clc;
+
+%% User settings
+nCircles = 30;
+framesPerSpeedPeriod = 180;
+nSpeedPeriods = 1;
+rotationsPerSpeedPeriod = 6;
+nFrames = framesPerSpeedPeriod * nSpeedPeriods;
+
+animateStimulus = true;
+saveGif = true;
+gifFile = fullfile(pwd, 'stereokinetic_circles.gif');
+gifDelayTime = 0.01;
+
+saveStaticPng = true;
+staticPngFile = fullfile(pwd, 'stereokinetic_circles_static.png');
+staticAngleDeg = -18;
+
+outerRadius = 1.0;
+innerRadius = outerRadius/nCircles;
+maxCenterOffset = 0.95 * (outerRadius - innerRadius);
+rotationCenter = [0, 0];
+
+%% Build the nested circles
+theta = linspace(0, 2*pi, 720);
+radii = linspace(outerRadius, innerRadius, nCircles);
+
+centerOffsets = zeros(1, nCircles);
+firstBreak = round(nCircles/3);
+secondBreak = round(2*nCircles/3);
+
+for i_cir = 1:firstBreak
+    centerOffsets(i_cir) = maxCenterOffset * ...
+        (1 - (radii(i_cir) - innerRadius) ./ (outerRadius - innerRadius));
+end
+
+for i_cir = firstBreak + 1:secondBreak
+    centerOffsets(i_cir) = max(centerOffsets(i_cir - 1) - innerRadius, 0);
+end
+
+for i_cir = secondBreak + 1:nCircles
+    centerOffsets(i_cir) = centerOffsets(i_cir - 1) + innerRadius;
+end
+
+circleColors = zeros(nCircles, 3);
+for iCircle = 1:nCircles
+    if mod(iCircle, 2) == 1
+        circleColors(iCircle, :) = [0, 0, 0];
+    else
+        circleColors(iCircle, :) = [1, 1, 1];
+    end
+end
+
+%% Build figure
+fig = figure('Color', 'w', ...
+    'Name', 'Stereokinetic Circles', ...
+    'NumberTitle', 'off', ...
+    'Position', [100, 100, 1400, 700]);
+axStatic = axes('Parent', fig, ...
+    'Units', 'normalized', ...
+    'Position', [0, 0, 0.5, 1], ...
+    'LooseInset', [0, 0, 0, 0]);
+axRotating = axes('Parent', fig, ...
+    'Units', 'normalized', ...
+    'Position', [0.5, 0, 0.5, 1], ...
+    'LooseInset', [0, 0, 0, 0]);
+
+plotLimit = outerRadius + maxCenterOffset + 0.05;
+axis(axStatic, 'equal');
+axis(axStatic, [-plotLimit, plotLimit, -plotLimit, plotLimit]);
+axis(axStatic, 'off');
+axis(axRotating, 'equal');
+axis(axRotating, [-plotLimit, plotLimit, -plotLimit, plotLimit]);
+axis(axRotating, 'off');
+
+drawCircleSet(axStatic, theta, radii, centerOffsets, circleColors, ...
+    rotationCenter, staticAngleDeg);
+drawCircleSet(axRotating, theta, radii, centerOffsets, circleColors, ...
+    rotationCenter, staticAngleDeg);
+drawnow;
+
+if saveStaticPng
+    exportgraphics(axStatic, staticPngFile, 'Resolution', 300, ...
+        'BackgroundColor', 'white');
+    fprintf('Saved static PNG: %s\n', staticPngFile);
+end
+
+if animateStimulus
+    anglesDeg = makeSinusoidalSpeedAngles(staticAngleDeg, nFrames, ...
+        framesPerSpeedPeriod, rotationsPerSpeedPeriod);
+
+    if saveGif && exist(gifFile, 'file')
+        delete(gifFile);
+    end
+
+    for iFrame = 1:numel(anglesDeg)
+        drawCircleSet(axRotating, theta, radii, centerOffsets, circleColors, ...
+            rotationCenter, anglesDeg(iFrame));
+        drawnow;
+
+        if saveGif
+            frame = getframe(fig);
+            imageData = frame2im(frame);
+            [im, cmap] = rgb2ind(imageData, 256);
+            if iFrame == 1
+                imwrite(im, cmap, gifFile, 'gif', ...
+                    'LoopCount', inf, 'DelayTime', gifDelayTime);
+            else
+                imwrite(im, cmap, gifFile, 'gif', ...
+                    'WriteMode', 'append', 'DelayTime', gifDelayTime);
+            end
+        end
+
+    end
+
+    if saveGif
+        gifInfo = imfinfo(gifFile);
+        fprintf('Saved animated GIF: %s\n', gifFile);
+        fprintf('GIF frames: %d\n', numel(gifInfo));
+    end
+end
+
+function anglesDeg = makeSinusoidalSpeedAngles(startAngleDeg, nFrames, ...
+    framesPerSpeedPeriod, rotationsPerSpeedPeriod)
+phase = 2*pi*(0:nFrames - 1) ./ framesPerSpeedPeriod;
+rawSpeed = sin(phase);
+
+onePeriodPhase = 2*pi*(0:framesPerSpeedPeriod - 1) ./ framesPerSpeedPeriod;
+onePeriodAbsSpeed = abs(sin(onePeriodPhase));
+degreesPerSpeedUnit = rotationsPerSpeedPeriod * 360 / sum(onePeriodAbsSpeed);
+
+angleStepsDeg = degreesPerSpeedUnit * rawSpeed;
+anglesDeg = startAngleDeg + [0, cumsum(angleStepsDeg(1:end - 1))];
+end
+
+function drawCircleSet(ax, theta, radii, centerOffsets, circleColors, ...
+    rotationCenter, angleDeg)
+cla(ax);
+hold(ax, 'on');
+
+rot = [cosd(angleDeg), -sind(angleDeg); ...
+       sind(angleDeg),  cosd(angleDeg)];
+
+for iCircle = 1:numel(radii)
+    localCenter = [centerOffsets(iCircle), 0];
+    center = rotationCenter + (rot * localCenter.').';
+    x = center(1) + radii(iCircle) * cos(theta);
+    y = center(2) + radii(iCircle) * sin(theta);
+    patch(ax, x, y, circleColors(iCircle, :), ...
+        'EdgeColor', 'none');
+end
+
+plotLimit = max(radii) + max(centerOffsets) + 0.05;
+axis(ax, 'equal');
+axis(ax, [-plotLimit, plotLimit, -plotLimit, plotLimit]);
+axis(ax, 'off');
+hold(ax, 'off');
+end

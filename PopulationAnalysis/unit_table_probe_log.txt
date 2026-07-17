@@ -1,0 +1,46 @@
+hello
+   251    42
+
+    {'Date'           }
+    {'ROI'            }
+    {'Hole'           }
+    {'Depth'          }
+    {'Offset'         }
+    {'Guide'          }
+    {'StimLoc'        }
+    {'Paths'          }
+    {'Names'          }
+    {'Folder_Index'   }
+    {'NChannels'      }
+    {'StimElec'       }
+    {'ROI_review'     }
+    {'DeadChannel'    }
+    {'p_adjusted'     }
+    {'p_AI'           }
+    {'Monkey'         }
+    {'Coeff_Z'        }
+    {'Delta_bias'     }
+    {'sigma_nonStim'  }
+    {'sigma_Stim'     }
+    {'Delta_sigma'    }
+    {'AI'             }
+    {'OD_lsq'         }
+    {'OD_lsq_eye'     }
+    {'OD_max'         }
+    {'OD_lsq_all'     }
+    {'OD_lsq_eye_all' }
+    {'OD_max_all'     }
+    {'OD_max_eye_all' }
+    {'Z3D_v_Z2D'      }
+    {'tuning_z'       }
+    {'tuning_mean'    }
+    {'tuning_SEM'     }
+    {'tuning_2D'      }
+    {'Raw2D_StimCh'   }
+    {'OriginalRecIdx' }
+    {'ND'             }
+    {'Behav_goodfit_S'}
+    {'Behav_goodfit_N'}
+    {'Behav_bias_N'   }
+    {'Behav_bias_S'   }
+

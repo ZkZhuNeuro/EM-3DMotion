@@ -1,0 +1,7 @@
+Rows: 1210
+Rows with GoodTrialSDF: 2
+Variables: SourceRow, Name, ROI, StimLoc, Monkey, TT, Unit, OriginalNeuronIndex, OriginalRepeatCount, KeptRepeatCount, MetadataUnits, UnitSource, NeuroResp, NeuroRespSize, GoodTrialSDF, GoodTrialInfo, GoodTrialSDFSize, GoodTrialSDFSource
+First filled row: 1
+GoodTrialSDF size: [1247 990]
+GoodTrialInfo size: [1247 10]
+GoodTrialSDFSource: Offline_3DMotion_update:good_trials:event118to130

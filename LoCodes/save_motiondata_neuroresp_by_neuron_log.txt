@@ -1,0 +1,6 @@
+Started: 30-Jun-2026 15:00:37
+Completed: 30-Jun-2026 15:02:16
+Rows: 1210
+Variables: SourceRow, Name, ROI, StimLoc, Monkey, TT, Unit, OriginalNeuronIndex, OriginalRepeatCount, KeptRepeatCount, MetadataUnits, UnitSource, NeuroResp, NeuroRespSize
+First NeuroResp size: [4 13 26]
+Last NeuroResp size: [4 13 21]

@@ -1,5 +1,5 @@
 %% Build MIDTable and run stimulation tuning analysis for Jim and Clay
-clearvars -except sessionLimitPerMonkey analysisSessionIndices runSummaryPlots saveAnalysisOutput analysisOutputPath showPipelineWarnings savePipelineFigures
+clearvars -except sessionLimitPerMonkey analysisSessionIndices runSummaryPlots saveAnalysisOutput analysisOutputPath showPipelineWarnings savePipelineFigures saveCheckpointAfterEachSession
 
 if ~exist('sessionLimitPerMonkey', 'var')
     sessionLimitPerMonkey = inf;
@@ -15,6 +15,10 @@ end
 
 if ~exist('saveAnalysisOutput', 'var')
     saveAnalysisOutput = false;
+end
+
+if ~exist('saveCheckpointAfterEachSession', 'var')
+    saveCheckpointAfterEachSession = saveAnalysisOutput;
 end
 
 if ~exist('analysisOutputPath', 'var')
@@ -38,10 +42,12 @@ colorsteps = [0 0 0;...
 
 conditionNames = {'Combined','MonoL','MonoR','Stereo'};
 CoherenceArray = [-22 -14 -10 -8 -4 -2 2 4 8 10 14 22]./22;
+UnitTableCoherenceArray = [-22 -14 -10 -8 -4 -2 0 2 4 8 10 14 22]./22;
 AnovaCoherenceArray = [-22 -14 -10 -8 8 10 14 22]./22;
 ChannelMap = [8 6 4 2 7 5 3 1 15 13 11 9 16 14 12 10];
 Distance = 0:50:50*(length(ChannelMap)-1);
 
+Setup3DMotionAnalysisPaths();
 run('BuildMIDTable_MUAStim_JimClay.m');
 
 if isempty(MIDTable)
@@ -60,6 +66,7 @@ if isempty(analysisSessionIndices)
 end
 
 MIDTable = initializeAnalysisColumns(MIDTable);
+unit_table = initializeUnitTableFromMIDTable(MIDTable);
 MIDTable.AnalysisStatus(:) = {'NotSelected'};
 MIDTable.AnalysisMessage(:) = {''};
 MIDTable.AnalysisStatus(analysisSessionIndices) = {'Pending'};
@@ -67,6 +74,7 @@ MIDTable.AnalysisStatus(analysisSessionIndices) = {'Pending'};
 FailedSessions = table();
 
 for rec = analysisSessionIndices
+    analysisStage = 'Stimulation_ClusteringIndexPipeline';
     safeDisplay(sprintf('Analyzing %s session %d/%d: %s, StimElec %d', ...
         MIDTable.Monkey{rec}, rec, height(MIDTable), datestr(MIDTable.Date(rec), 'yyyy-mm-dd'), MIDTable.StimElec(rec)));
     warningState = warning;
@@ -80,33 +88,42 @@ for rec = analysisSessionIndices
             Stimulation_ClusteringIndexPipeline( ...
             MIDTable.Monkey{rec}, MIDTable.Paths(rec), MIDTable.Names(rec,:), ...
             MIDTable.QuickNames(rec,:), MIDTable.Names_2D(rec,:), MIDTable.StimElec(rec), savePipelineFigures);
+
+        analysisStage = 'MetricComputation';
+        MIDTable = computeSessionMetrics(MIDTable, rec, AI, CI, R, Monocularity, Eye, delta_bias, BehaviorData, Neuro, CoherenceArray, AnovaCoherenceArray, conditionNames);
+        unit_table = computeUnitTableMetrics(unit_table, rec, AI, delta_bias, Neuro, BehaviorData, Monocularity, CoherenceArray, UnitTableCoherenceArray);
+        if runSummaryPlots
+            generateSessionSummaryPlot(MIDTable, rec, AI, CI, R, Eye, delta_bias, Neuro, BehaviorData, colorsteps, ChannelMap, Distance);
+        end
+
         MIDTable.AnalysisStatus(rec) = {'Success'};
         MIDTable.AnalysisMessage(rec) = {''};
     catch ME
-        FailedSessions = appendFailedSession(FailedSessions, MIDTable, rec, ME);
+        FailedSessions = appendFailedSession(FailedSessions, MIDTable, rec, ME, analysisStage);
         MIDTable.AnalysisStatus(rec) = {'Failed'};
         MIDTable.AnalysisMessage(rec) = {ME.message};
         safeDisplay(sprintf('Failed %s %s: %s', MIDTable.Monkey{rec}, ...
             datestr(MIDTable.Date(rec), 'yyyy-mm-dd'), ME.message));
-        continue
     end
 
     close all
-end
 
-successfulMask = false(height(MIDTable), 1);
-successfulMask(analysisSessionIndices) = true;
-if exist('FailedSessions', 'var') && ~isempty(FailedSessions)
-    successfulMask(FailedSessions.SessionIndex) = false;
-end
-
-successfulSessions = find(successfulMask);
-for rec = successfulSessions'
-    MIDTable = computeSessionMetrics(MIDTable, rec, AI, CI, R, Monocularity, Eye, delta_bias, BehaviorData, Neuro, CoherenceArray, AnovaCoherenceArray, conditionNames);
-    if runSummaryPlots
-        generateSessionSummaryPlot(MIDTable, rec, AI, CI, R, Eye, delta_bias, Neuro, BehaviorData, colorsteps, ChannelMap, Distance);
+    if saveAnalysisOutput && saveCheckpointAfterEachSession
+        AnalysisIssueTable = buildAnalysisIssueTable(SkippedSessions, FailedSessions);
+        saveVars = {'unit_table', 'MIDTable', 'SkippedSessions', 'FailedSessions', 'AnalysisIssueTable'};
+        optionalSaveVars = {'AI', 'CI', 'R', 'Monocularity', 'Eye', 'Eye_AI', 'delta_bias', ...
+            'Neuro', 'LFP_Data', 'BehaviorData', 'Sensits'};
+        for iSaveVar = 1:numel(optionalSaveVars)
+            if exist(optionalSaveVars{iSaveVar}, 'var')
+                saveVars{end + 1} = optionalSaveVars{iSaveVar}; %#ok<SAGROW>
+            end
+        end
+        save(analysisOutputPath, saveVars{:}, '-v7.3');
+        safeDisplay(sprintf('Checkpoint saved to %s', analysisOutputPath));
     end
 end
+
+successfulSessions = find(strcmp(MIDTable.AnalysisStatus, 'Success'));
 
 AnalysisIssueTable = buildAnalysisIssueTable(SkippedSessions, FailedSessions);
 
@@ -119,9 +136,15 @@ if ~isempty(AnalysisIssueTable)
 end
 
 if saveAnalysisOutput
-    save(analysisOutputPath, 'MIDTable', 'SkippedSessions', 'FailedSessions', 'AnalysisIssueTable', ...
-        'AI', 'CI', 'R', 'Monocularity', 'Eye', 'Eye_AI', 'delta_bias', ...
-        'Neuro', 'LFP_Data', 'BehaviorData', 'Sensits', '-v7.3');
+    saveVars = {'unit_table', 'MIDTable', 'SkippedSessions', 'FailedSessions', 'AnalysisIssueTable'};
+    optionalSaveVars = {'AI', 'CI', 'R', 'Monocularity', 'Eye', 'Eye_AI', 'delta_bias', ...
+        'Neuro', 'LFP_Data', 'BehaviorData', 'Sensits'};
+    for iSaveVar = 1:numel(optionalSaveVars)
+        if exist(optionalSaveVars{iSaveVar}, 'var')
+            saveVars{end + 1} = optionalSaveVars{iSaveVar}; %#ok<SAGROW>
+        end
+    end
+    save(analysisOutputPath, saveVars{:}, '-v7.3');
     safeDisplay(sprintf('Saved analysis output to %s', analysisOutputPath));
 end
 
@@ -225,6 +248,269 @@ MIDTable.AnalysisStatus = repmat({''}, height(MIDTable), 1);
 MIDTable.AnalysisMessage = repmat({''}, height(MIDTable), 1);
 end
 
+function unit_table = initializeUnitTableFromMIDTable(MIDTable)
+nRows = height(MIDTable);
+
+unit_table = table();
+unit_table.Date = MIDTable.Date;
+unit_table.ROI = MIDTable.ROI;
+unit_table.Hole = MIDTable.Hole;
+unit_table.Depth = MIDTable.Depth;
+unit_table.Offset = MIDTable.Offset;
+unit_table.Guide = MIDTable.Guide;
+unit_table.StimLoc = MIDTable.StimLoc;
+unit_table.Paths = MIDTable.Paths;
+unit_table.Names = MIDTable.QuickNames;
+unit_table.Folder_Index = MIDTable.Folder_Index;
+unit_table.NChannels = MIDTable.NChannels;
+unit_table.StimElec = MIDTable.StimElec;
+unit_table.ROI_review = getOptionalCellColumn(MIDTable, 'ROI_review', MIDTable.ROI);
+unit_table.DeadChannel = getOptionalCellColumn(MIDTable, 'DeadChannel', repmat({[]}, nRows, 1));
+unit_table.p_adjusted = repmat({nan(1, 4)}, nRows, 1);
+unit_table.p_AI = repmat({nan(4, 1)}, nRows, 1);
+unit_table.Monkey = MIDTable.Monkey;
+unit_table.Coeff_Z = repmat({nan(4, 16)}, nRows, 1);
+unit_table.Delta_bias = repmat({nan(1, 4)}, nRows, 1);
+unit_table.sigma_nonStim = repmat({nan(1, 4)}, nRows, 1);
+unit_table.sigma_Stim = repmat({nan(1, 4)}, nRows, 1);
+unit_table.Delta_sigma = repmat({nan(1, 4)}, nRows, 1);
+unit_table.AI = repmat({nan(4, 16)}, nRows, 1);
+unit_table.OD_lsq = repmat({nan}, nRows, 1);
+unit_table.OD_lsq_eye = repmat({''}, nRows, 1);
+unit_table.OD_max = repmat({nan}, nRows, 1);
+unit_table.OD_lsq_all = repmat({nan(1, 16)}, nRows, 1);
+unit_table.OD_lsq_eye_all = repmat({nan(1, 16)}, nRows, 1);
+unit_table.OD_max_all = repmat({nan(1, 16)}, nRows, 1);
+unit_table.OD_max_eye_all = repmat({nan(1, 16)}, nRows, 1);
+unit_table.Z3D_v_Z2D = repmat({nan}, nRows, 1);
+unit_table.tuning_z = repmat({nan(4, 13, 16)}, nRows, 1);
+unit_table.tuning_mean = repmat({nan(4, 13, 16)}, nRows, 1);
+unit_table.tuning_SEM = repmat({nan(4, 13, 16)}, nRows, 1);
+unit_table.tuning_2D = repmat({nan(8, 2, 3, 16)}, nRows, 1);
+unit_table.Raw2D_StimCh = repmat({[]}, nRows, 1);
+end
+
+function unit_table = computeUnitTableMetrics(unit_table, rec, AI, delta_bias, Neuro, BehaviorData, Monocularity, CoherenceArray, UnitTableCoherenceArray)
+stimElec = unit_table.StimElec(rec);
+neuroRec = Neuro(rec);
+behaviorRec = BehaviorData(rec);
+sessionAI = squeeze(AI(rec, :, :));
+if isvector(sessionAI)
+    sessionAI = reshape(sessionAI, 4, []);
+end
+
+validCoherence = find(neuroRec.Trials.NumTrials(1, :) > 0);
+unit_table.p_AI{rec} = computeTuningPValues(neuroRec, stimElec, validCoherence, CoherenceArray);
+unit_table.p_adjusted{rec} = adjustPValuesLikeUnitTable(unit_table.p_AI{rec});
+unit_table.Coeff_Z{rec} = computeCoeffZ(neuroRec, validCoherence, CoherenceArray);
+unit_table.Delta_bias{rec} = squeeze(delta_bias(rec, :));
+unit_table.sigma_nonStim{rec} = behaviorRec.NoStim.pFitVals(2, :);
+unit_table.sigma_Stim{rec} = behaviorRec.Stim.pFitVals(2, :);
+unit_table.Delta_sigma{rec} = unit_table.sigma_nonStim{rec} - unit_table.sigma_Stim{rec};
+unit_table.AI{rec} = sessionAI;
+
+[odLsq, odLsqEye, odMax, odLsqAll, odLsqEyeAll, odMaxAll, odMaxEyeAll] = computeODFields(neuroRec.Means, stimElec, validCoherence);
+unit_table.OD_lsq{rec} = odLsq;
+unit_table.OD_lsq_eye{rec} = odLsqEye;
+unit_table.OD_max{rec} = odMax;
+unit_table.OD_lsq_all{rec} = odLsqAll;
+unit_table.OD_lsq_eye_all{rec} = odLsqEyeAll;
+unit_table.OD_max_all{rec} = odMaxAll;
+unit_table.OD_max_eye_all{rec} = odMaxEyeAll;
+unit_table.Z3D_v_Z2D{rec} = computeZ3DMinusZ2D(neuroRec, Monocularity(rec), stimElec, validCoherence);
+
+unit_table.tuning_mean{rec} = expandCoherenceArray(neuroRec.Means, CoherenceArray, UnitTableCoherenceArray);
+if isfield(neuroRec, 'SEM')
+    unit_table.tuning_SEM{rec} = expandCoherenceArray(neuroRec.SEM, CoherenceArray, UnitTableCoherenceArray);
+end
+unit_table.tuning_z{rec} = zScoreTuning(unit_table.tuning_mean{rec});
+if isfield(neuroRec, 'Neuro2D') && isfield(neuroRec.Neuro2D, 'Means')
+    unit_table.tuning_2D{rec} = neuroRec.Neuro2D.Means;
+end
+if isfield(neuroRec, 'Neuro2D') && isfield(neuroRec.Neuro2D, 'All') && stimElec <= size(neuroRec.Neuro2D.All, 5)
+    unit_table.Raw2D_StimCh{rec} = squeeze(neuroRec.Neuro2D.All(:, :, :, :, stimElec));
+end
+end
+
+function values = getOptionalCellColumn(sourceTable, varName, defaultValues)
+if ismember(varName, sourceTable.Properties.VariableNames)
+    values = sourceTable.(varName);
+else
+    values = defaultValues;
+end
+end
+
+function pValues = computeTuningPValues(neuroRec, stimElec, validCoherence, coherenceArray)
+pValues = nan(4, 1);
+for cond = 1:4
+    pValues(cond) = computeTuningPValue(neuroRec, cond, stimElec, validCoherence, coherenceArray);
+end
+end
+
+function pValue = computeTuningPValue(neuroRec, cond, channel, validCoherence, coherenceArray)
+pValue = nan;
+anovaTable = table();
+maxCoherenceIdx = min(numel(coherenceArray), size(neuroRec.All, 2));
+for c = 1:maxCoherenceIdx
+    if ~ismember(c, validCoherence)
+        continue
+    end
+    nTrials = neuroRec.Trials.NumTrials(cond, c);
+    if nTrials <= 0
+        continue
+    end
+    firingRate = squeeze(neuroRec.All(cond, c, 1:nTrials, channel));
+    coherence = repelem(coherenceArray(c), numel(firingRate), 1);
+    anovaTable = [anovaTable; table(firingRate(:), coherence(:), 'VariableNames', {'FR', 'Coherence'})]; %#ok<AGROW>
+end
+
+if height(anovaTable) < 4
+    return
+end
+
+try
+    anovaTable.Abs_Coherence = abs(anovaTable.Coherence);
+    anovaTable.Direction = sign(anovaTable.Coherence);
+    lm = fitlm(anovaTable, 'FR ~ Abs_Coherence + Direction');
+    anovaResults = anova(lm);
+    pValue = anovaResults.pValue(2);
+catch
+    pValue = nan;
+end
+end
+
+function pAdjusted = adjustPValuesLikeUnitTable(pValues)
+pAdjustedColumn = nan(4, 1);
+[~, sortIdx] = sort(pValues, 'descend');
+pAdjustedColumn(sortIdx) = pValues(sortIdx) .* linspace(1, numel(sortIdx), numel(sortIdx))';
+pAdjusted = pAdjustedColumn.';
+end
+
+function coeffZ = computeCoeffZ(neuroRec, validCoherence, coherenceArray)
+nChannels = size(neuroRec.Means, 3);
+coeffZ = nan(4, nChannels);
+for channel = 1:nChannels
+    for cond = 1:4
+        anovaTable = table();
+        maxCoherenceIdx = min(numel(coherenceArray), size(neuroRec.All, 2));
+        for c = 1:maxCoherenceIdx
+            if ~ismember(c, validCoherence)
+                continue
+            end
+            nTrials = neuroRec.Trials.NumTrials(cond, c);
+            if nTrials <= 0
+                continue
+            end
+            firingRate = squeeze(neuroRec.All(cond, c, 1:nTrials, channel));
+            coherence = repelem(coherenceArray(c), numel(firingRate), 1);
+            anovaTable = [anovaTable; table(firingRate(:), coherence(:), 'VariableNames', {'FR', 'Coherence'})]; %#ok<AGROW>
+        end
+        if height(anovaTable) < 4 || std(anovaTable.FR) == 0
+            continue
+        end
+        try
+            anovaTable.Abs_Coherence = abs(anovaTable.Coherence);
+            anovaTable.Direction = sign(anovaTable.Coherence);
+            anovaTable.FR_z = (anovaTable.FR - mean(anovaTable.FR)) / std(anovaTable.FR);
+            lmZ = fitlm(anovaTable, 'FR_z ~ Abs_Coherence + Direction');
+            coeffZ(cond, channel) = lmZ.Coefficients{'Direction', 'Estimate'};
+        catch
+        end
+    end
+end
+end
+
+function [odLsq, odLsqEye, odMax, odLsqAll, odLsqEyeAll, odMaxAll, odMaxEyeAll] = computeODFields(neuroMean, stimElec, validCoherence)
+nChannels = size(neuroMean, 3);
+odLsqAll = nan(1, nChannels);
+odLsqEyeAll = nan(1, nChannels);
+odMaxAll = nan(1, nChannels);
+odMaxEyeAll = nan(1, nChannels);
+
+for channel = 1:nChannels
+    [odLsqAll(channel), odLsqEyeAll(channel), odMaxAll(channel), odMaxEyeAll(channel)] = computeChannelOD(neuroMean, channel, validCoherence);
+end
+
+odLsqSigned = odLsqAll(stimElec);
+odLsq = abs(odLsqSigned);
+odLsqEye = char(odLsqEyeAll(stimElec));
+odMax = odMaxAll(stimElec);
+end
+
+function [odLsq, odLsqEyeCode, odMax, odMaxEyeCode] = computeChannelOD(neuroMean, channel, validCoherence)
+comb = squeeze(neuroMean(1, validCoherence, channel));
+left = squeeze(neuroMean(2, validCoherence, channel));
+right = squeeze(neuroMean(3, validCoherence, channel));
+lsqLeft = sum((comb - left) .^ 2);
+lsqRight = sum((comb - right) .^ 2);
+
+if lsqLeft < lsqRight
+    odLsqEyeCode = double('L');
+elseif lsqLeft > lsqRight
+    odLsqEyeCode = double('R');
+else
+    odLsqEyeCode = double('N');
+end
+odLsq = (lsqLeft - lsqRight) / (lsqLeft + lsqRight);
+
+odMax = (max(left) - max(right)) / (max(left) + max(right));
+if odMax > 0
+    odMaxEyeCode = double('L');
+elseif odMax < 0
+    odMaxEyeCode = double('R');
+else
+    odMaxEyeCode = double('N');
+end
+end
+
+function z3DMinusZ2D = computeZ3DMinusZ2D(neuroRec, monocularityRec, stimElec, validCoherence)
+z3DMinusZ2D = nan;
+neuroMean = neuroRec.Means;
+
+try
+    leftEye = squeeze(neuroMean(2, validCoherence, stimElec));
+    rightEye = squeeze(neuroMean(3, validCoherence, stimElec));
+    leftEye = leftEye(:);
+    rightEye = rightEye(:);
+    pred2DCorr = corr(leftEye, flipud(rightEye));
+    pred3DCorr = corr(leftEye, rightEye);
+    if isfield(monocularityRec, 'Max') && monocularityRec.Max(stimElec) > 0
+        pred2Dv3DCorr = corr(rightEye, flipud(rightEye));
+    else
+        pred2Dv3DCorr = corr(leftEye, flipud(leftEye));
+    end
+    [~, ~, z2D, z3D] = partial_corr_custom(pred2DCorr, pred3DCorr, pred2Dv3DCorr, numel(validCoherence));
+    z3DMinusZ2D = z3D - z2D;
+catch
+    z3DMinusZ2D = nan;
+end
+end
+
+function expanded = expandCoherenceArray(values, sourceCoherence, targetCoherence)
+valueSize = size(values);
+expanded = nan([valueSize(1), numel(targetCoherence), valueSize(3:end)]);
+for iSource = 1:min(numel(sourceCoherence), valueSize(2))
+    targetIdx = find(abs(targetCoherence - sourceCoherence(iSource)) < 1e-12, 1, 'first');
+    if ~isempty(targetIdx)
+        expanded(:, targetIdx, :) = values(:, iSource, :);
+    end
+end
+end
+
+function tuningZ = zScoreTuning(tuningMean)
+tuningZ = nan(size(tuningMean));
+for channel = 1:size(tuningMean, 3)
+    for cond = 1:size(tuningMean, 1)
+        tuning = squeeze(tuningMean(cond, :, channel));
+        meanTuning = mean(tuning, 'omitnan');
+        stdTuning = std(tuning, [], 'omitnan');
+        if stdTuning > 0
+            tuningZ(cond, :, channel) = (tuning - meanTuning) ./ stdTuning;
+        end
+    end
+end
+end
+
 function generateSessionSummaryPlot(MIDTable, rec, AI, CI, R, Eye, delta_bias, Neuro, BehaviorData, colorsteps, ChannelMap, Distance)
 stim_idx = find(ChannelMap == MIDTable.StimElec(rec));
 
@@ -265,7 +551,11 @@ saveas(f, [MIDTable.Paths{rec}, 'Summary.pdf']);
 close(f)
 end
 
-function FailedSessions = appendFailedSession(FailedSessions, MIDTable, rec, ME)
+function FailedSessions = appendFailedSession(FailedSessions, MIDTable, rec, ME, analysisStage)
+if nargin < 5 || isempty(analysisStage)
+    analysisStage = 'Stimulation_ClusteringIndexPipeline';
+end
+
 errorFile = '';
 errorFunction = '';
 errorLine = NaN;
@@ -278,7 +568,7 @@ end
 tempTable = table();
 tempTable.SessionIndex = rec;
 tempTable.IssueType = {'Failed'};
-tempTable.Stage = {'Stimulation_ClusteringIndexPipeline'};
+tempTable.Stage = {analysisStage};
 tempTable.Monkey = MIDTable.Monkey(rec);
 tempTable.Date = MIDTable.Date(rec);
 tempTable.ROI = MIDTable.ROI(rec);
