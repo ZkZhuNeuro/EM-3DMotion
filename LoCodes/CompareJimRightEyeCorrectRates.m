@@ -488,6 +488,7 @@ function make_correct_rate_figures(sessionConditionTable, conditionCoherenceTabl
     pairedDifferenceTable, conditionNames, rightConditionName, outputDir)
 
 blocks = unique(sessionConditionTable.Block, 'stable');
+conditionColors = get_condition_colors(conditionNames);
 
 for blockIdx = 1:numel(blocks)
     blockName = blocks(blockIdx);
@@ -498,11 +499,11 @@ for blockIdx = 1:numel(blocks)
     tiledlayout(fig, 1, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
 
     nexttile
-    plot_session_condition_rates(blockSessionTable, conditionNames, rightConditionName);
+    plot_session_condition_rates(blockSessionTable, conditionNames, conditionColors);
     title(sprintf('%s correct rate by cue', blockName), 'Interpreter', 'none');
 
     nexttile
-    plot_paired_differences(blockDiffTable);
+    plot_paired_differences(blockDiffTable, conditionNames, conditionColors);
     title(sprintf('%s MonoR paired differences', blockName), 'Interpreter', 'none');
 
     saveas(fig, fullfile(outputDir, sprintf('Jim_%s_MonoR_correct_rate_summary.fig', blockName)));
@@ -511,7 +512,7 @@ for blockIdx = 1:numel(blocks)
 
     fig2 = figure('Color', 'w', 'Name', sprintf('Jim_%s_correct_rate_by_coherence', blockName));
     blockCoherenceTable = conditionCoherenceTable(conditionCoherenceTable.Block == blockName, :);
-    plot_correct_rate_by_abs_coherence(blockCoherenceTable, conditionNames, rightConditionName);
+    plot_correct_rate_by_abs_coherence(blockCoherenceTable, conditionNames, conditionColors);
     title(sprintf('%s correct rate by absolute coherence', blockName), 'Interpreter', 'none');
 
     saveas(fig2, fullfile(outputDir, sprintf('Jim_%s_correct_rate_by_abs_coherence.fig', blockName)));
@@ -520,7 +521,7 @@ for blockIdx = 1:numel(blocks)
 end
 end
 
-function plot_session_condition_rates(T, conditionNames, rightConditionName)
+function plot_session_condition_rates(T, conditionNames, conditionColors)
 hold on
 sessionIDs = unique(T.SessionID, 'stable');
 xVals = 1:numel(conditionNames);
@@ -537,12 +538,6 @@ for sessionIdx = 1:numel(sessionIDs)
     plot(xVals, rateMatrix(sessionIdx, :), '-', 'Color', [0.78 0.78 0.78], 'LineWidth', 0.5);
 end
 
-rightIdx = find(conditionNames == rightConditionName, 1);
-conditionColors = repmat([0.15 0.15 0.15], numel(conditionNames), 1);
-if ~isempty(rightIdx)
-    conditionColors(rightIdx, :) = [0.1 0.45 0.85];
-end
-
 for condIdx = 1:numel(conditionNames)
     scatter(repelem(condIdx, size(rateMatrix, 1)), rateMatrix(:, condIdx), ...
         16, conditionColors(condIdx, :), 'filled', ...
@@ -551,8 +546,12 @@ end
 
 meanRates = mean(rateMatrix, 1, 'omitnan');
 semRates = std(rateMatrix, 0, 1, 'omitnan') ./ sqrt(sum(isfinite(rateMatrix), 1));
-errorbar(xVals, meanRates, semRates, 'ko-', 'LineWidth', 2, ...
-    'MarkerFaceColor', 'w', 'MarkerSize', 7);
+for condIdx = 1:numel(conditionNames)
+    errorbar(xVals(condIdx), meanRates(condIdx), semRates(condIdx), 'o', ...
+        'Color', conditionColors(condIdx, :), 'MarkerFaceColor', 'w', ...
+        'MarkerEdgeColor', conditionColors(condIdx, :), 'LineWidth', 2, ...
+        'MarkerSize', 7);
+end
 
 xticks(xVals)
 xticklabels(conditionNames)
@@ -563,7 +562,7 @@ box on
 axis square
 end
 
-function plot_paired_differences(T)
+function plot_paired_differences(T, conditionNames, conditionColors)
 hold on
 if isempty(T)
     text(0.5, 0.5, 'No paired differences', 'HorizontalAlignment', 'center');
@@ -572,7 +571,18 @@ if isempty(T)
 end
 
 try
-    boxchart(categorical(T.ComparatorCondition), T.Difference);
+    comparators = unique(T.ComparatorCondition, 'stable');
+    for idx = 1:numel(comparators)
+        rows = T.ComparatorCondition == comparators(idx);
+        colorIdx = find(conditionNames == comparators(idx), 1);
+        if isempty(colorIdx)
+            thisColor = [0.2 0.2 0.2];
+        else
+            thisColor = conditionColors(colorIdx, :);
+        end
+        boxchart(categorical(T.ComparatorCondition(rows)), T.Difference(rows), ...
+            'BoxFaceColor', thisColor, 'MarkerColor', thisColor);
+    end
 catch
     boxplot(T.Difference, categorical(T.ComparatorCondition));
 end
@@ -583,31 +593,19 @@ box on
 axis square
 end
 
-function plot_correct_rate_by_abs_coherence(T, conditionNames, rightConditionName)
+function plot_correct_rate_by_abs_coherence(T, conditionNames, conditionColors)
 hold on
 absLevels = unique(T.AbsCoherence);
 absLevels = absLevels(isfinite(absLevels));
 absLevels = sort(absLevels(:));
 
-colors = lines(numel(conditionNames));
-rightIdx = find(conditionNames == rightConditionName, 1);
-if ~isempty(rightIdx)
-    colors(rightIdx, :) = [0.1 0.45 0.85];
-end
-
 for condIdx = 1:numel(conditionNames)
-    rates = nan(size(absLevels));
-    for levelIdx = 1:numel(absLevels)
-        rows = T(T.ConditionName == conditionNames(condIdx) & ...
-            abs(T.AbsCoherence - absLevels(levelIdx)) < 1e-10, :);
-        totalCorrect = sum(rows.CorrectCount, 'omitnan');
-        totalTrials = sum(rows.TotalTrials, 'omitnan');
-        if totalTrials > 0
-            rates(levelIdx) = totalCorrect ./ totalTrials;
-        end
-    end
-    plot(absLevels, rates, '-o', 'Color', colors(condIdx, :), ...
-        'MarkerFaceColor', colors(condIdx, :), 'LineWidth', 2, ...
+    [meanRates, semRates] = compute_session_rates_by_abs_coherence( ...
+        T, conditionNames(condIdx), absLevels);
+    errorbar(absLevels, meanRates, semRates, '-o', ...
+        'Color', conditionColors(condIdx, :), ...
+        'MarkerFaceColor', conditionColors(condIdx, :), 'LineWidth', 2, ...
+        'CapSize', 7, ...
         'DisplayName', conditionNames(condIdx));
 end
 
@@ -617,6 +615,52 @@ ylim([0.45 1])
 legend('Location', 'southeast')
 box on
 axis square
+end
+
+function [meanRates, semRates] = compute_session_rates_by_abs_coherence( ...
+    T, conditionName, absLevels)
+
+meanRates = nan(size(absLevels));
+semRates = nan(size(absLevels));
+for levelIdx = 1:numel(absLevels)
+    rows = T(T.ConditionName == conditionName & ...
+        abs(T.AbsCoherence - absLevels(levelIdx)) < 1e-10, :);
+
+    sessionIDs = unique(rows.SessionID, 'stable');
+    sessionRates = nan(numel(sessionIDs), 1);
+    for sessionIdx = 1:numel(sessionIDs)
+        sessionRows = rows(rows.SessionID == sessionIDs(sessionIdx), :);
+        totalCorrect = sum(sessionRows.CorrectCount, 'omitnan');
+        totalTrials = sum(sessionRows.TotalTrials, 'omitnan');
+        if totalTrials > 0
+            sessionRates(sessionIdx) = totalCorrect ./ totalTrials;
+        end
+    end
+
+    validRates = sessionRates(isfinite(sessionRates));
+    if ~isempty(validRates)
+        meanRates(levelIdx) = mean(validRates);
+        semRates(levelIdx) = std(validRates) ./ sqrt(numel(validRates));
+    end
+end
+end
+
+function conditionColors = get_condition_colors(conditionNames)
+conditionColors = nan(numel(conditionNames), 3);
+for condIdx = 1:numel(conditionNames)
+    switch string(conditionNames(condIdx))
+        case {"Combined", "Comb"}
+            conditionColors(condIdx, :) = [0 0 0] ./ 255;
+        case {"MonoL", "L Mono", "Left"}
+            conditionColors(condIdx, :) = [0 0 255] ./ 255;
+        case {"MonoR", "R Mono", "Right"}
+            conditionColors(condIdx, :) = [5 150 5] ./ 255;
+        case {"Bino", "Stereo", "Binocular"}
+            conditionColors(condIdx, :) = [234 0 233] ./ 255;
+        otherwise
+            conditionColors(condIdx, :) = [0.2 0.2 0.2];
+    end
+end
 end
 
 function write_summary_file(summaryPath, behaviorFile, outputDir, conditionNames, ...
@@ -672,4 +716,5 @@ if ~isempty(mixedModelSummaryTable)
             row.RightEyeLogOddsP, row.RightEyeByAbsCoherenceP);
     end
 end
+
 end

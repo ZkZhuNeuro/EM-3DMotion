@@ -1,0 +1,3 @@
+UnitTableRow,Date,Monkey,ROI,TrialInfoFile,TrialType,TrialCount,TrialsWithMicrosaccade,TrialsWithMicrosaccadePct,MicrosaccadeCount,MeanCountPerTrial,MedianCountPerTrial,MeanRateHz,MedianRateHz,MeanAmplitudeDeg,MeanPeakVelocityDegS
+1,14-Jul-2021,Jim,MT,P:\Jim\NeuroData\20210714\Jim_MT_14July2021_MUA_3DMotionStim_TInfo.mat,NonStim,526,37,7.03422053231939,47,0.0893536121673004,0,0.0917528323395037,0,0.312499074959099,28.0410138907079
+1,14-Jul-2021,Jim,MT,P:\Jim\NeuroData\20210714\Jim_MT_14July2021_MUA_3DMotionStim_TInfo.mat,Stim,523,24,4.58891013384321,25,0.0478011472275335,0,0.0491292382648226,0,0.230937620847077,22.5774793096451

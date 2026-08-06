@@ -1,0 +1,35 @@
+Output: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\LoCodes\tmp\LabelThinNeuroRespByMIDTable_test.mat
+Thin rows: 1210
+MIDTable rows: 892
+Score variable used: Z3D_v_Z2D
+Matched to MIDTable: 892
+NeuroType 2D: 146
+NeuroType 3D: 67
+NeuroType unclassified: 50
+NeuroType 2Donly: 95
+NeuroType unincluded: 852
+Variables: ROI, Monkey, TT, Unit, UnitSource, NeuroResp, NeuroType, Z3D_v_Z2D
+
+First unmatched rows:
+row 6 | Name=Jim_MT_15Feb2019_TT1_mrg_Sorted-03_LateralMotion_TInfo.mat | ROI=MT | TT=1 | Unit=3
+row 18 | Name=Jim_MT_27Feb2019_TT1_mrg_Sorted-02_LateralMotion_TInfo.mat | ROI=MT | TT=1 | Unit=4
+row 25 | Name=Jim_MT_27Feb2019_TT4_mrg_Sorted-02_LateralMotion_TInfo.mat | ROI=MT | TT=4 | Unit=3
+row 27 | Name=Jim_MT_06Mar2019_TT2_mrg_Sorted-01_LateralMotion_TInfo.mat | ROI=MT | TT=2 | Unit=3
+row 28 | Name=Jim_MT_06Mar2019_TT2_mrg_Sorted-01_LateralMotion_TInfo.mat | ROI=MT | TT=2 | Unit=4
+row 41 | Name=Jim_MT_07Mar2019_TT4_mrg_Sorted-01_LateralMotion_TInfo.mat | ROI=MT | TT=4 | Unit=4
+row 43 | Name=Jim_MT_08Mar2019_TT2_mrg_Sorted-04_LateralMotion_TInfo.mat | ROI=MT | TT=2 | Unit=3
+row 50 | Name=Jim_MT_14Mar2019_TT2_mrg_Sorted-02_LateralMotion_TInfo.mat | ROI=MT | TT=2 | Unit=4
+row 53 | Name=Jim_MT_14Mar2019_TT3_mrg_Sorted-02_LateralMotion_TInfo.mat | ROI=MT | TT=3 | Unit=4
+row 55 | Name=Jim_MT_14Mar2019_TT4_mrg_Sorted-03_LateralMotion_TInfo.mat | ROI=MT | TT=4 | Unit=3
+
+First matched rows:
+row 1 -> MIDTable row 1 | ROI=MT | TT=NaN | Unit=2 | score=-7.66997 | NeuroType=2D
+row 2 -> MIDTable row 2 | ROI=MT | TT=NaN | Unit=3 | score=1.17932 | NeuroType=unincluded
+row 3 -> MIDTable row 3 | ROI=MT | TT=2 | Unit=2 | score=-1.94617 | NeuroType=2D
+row 4 -> MIDTable row 4 | ROI=MT | TT=4 | Unit=2 | score=-1.26645 | NeuroType=unclassified
+row 5 -> MIDTable row 5 | ROI=MT | TT=1 | Unit=2 | score=-3.02511 | NeuroType=2Donly
+row 7 -> MIDTable row 6 | ROI=MT | TT=3 | Unit=2 | score=-2.22198 | NeuroType=2D
+row 8 -> MIDTable row 7 | ROI=MT | TT=1 | Unit=2 | score=-4.75 | NeuroType=2D
+row 9 -> MIDTable row 8 | ROI=MT | TT=1 | Unit=3 | score=-5.47243 | NeuroType=2D
+row 10 -> MIDTable row 9 | ROI=MT | TT=2 | Unit=2 | score=-2.54931 | NeuroType=2D
+row 11 -> MIDTable row 10 | ROI=MT | TT=2 | Unit=3 | score=-5.66555 | NeuroType=2D

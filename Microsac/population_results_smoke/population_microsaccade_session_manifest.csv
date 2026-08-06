@@ -1,0 +1,2 @@
+UnitTableRow,Date,Monkey,ROI,RecordingFolder,TrialInfoFile,SelIndexFile,OutputDir,Status,Message,TrialCount,ValidTrialCount,EventCount,RuntimeSeconds
+1,14-Jul-2021,Jim,MT,P:\Jim\NeuroData\20210714\,P:\Jim\NeuroData\20210714\Jim_MT_14July2021_MUA_3DMotionStim_TInfo.mat,P:\Jim\NeuroData\20210714\Jim_MT_14July2021_MUA_3DMotionStim_SelIndex.mat,C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\Microsac\population_results_smoke\001_Jim_MT_14July2021_MUA_3DMotionStim,Completed,,1049,1049,72,44.6664574

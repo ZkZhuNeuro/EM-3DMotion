@@ -1,0 +1,25 @@
+Clay left-eye correct-rate comparison
+Generated: 19-Jul-2026 12:38:18
+Behavior file: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\BehaviorFitting\BehaviorData_Clay.mat
+Output directory: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\BehaviorFitting\ClayLeftEyeCorrectRate
+Analyzed blocks: nonStim
+Condition order: Combined, MonoL, MonoR, Bino
+Left-eye condition: MonoL
+Zero-coherence trials excluded from correct-rate calculations.
+
+Block: nonStim
+  Sessions with at least one valid condition: 103
+  Combined: N sessions=103, pooled correct rate=0.9062 (9799/10813)
+  MonoL: N sessions=103, pooled correct rate=0.7710 (8361/10844)
+  MonoR: N sessions=103, pooled correct rate=0.8150 (8854/10864)
+  Bino: N sessions=103, pooled correct rate=0.7876 (8531/10832)
+
+Paired stats:
+  nonStim MonoL - Combined: N=103, mean diff=-0.13579, t-test p=1.5984e-38, signrank p=1.4437e-18
+  nonStim MonoL - MonoR: N=103, mean diff=-0.04526, t-test p=2.2488e-12, signrank p=6.0036e-11
+  nonStim MonoL - Bino: N=103, mean diff=-0.01746, t-test p=0.0067356, signrank p=0.008916
+
+Mixed model summary:
+  nonStim MonoL vs Combined: left-eye log-odds estimate=-1.63133, p=1.6849e-116; interaction p=3.5778e-18
+  nonStim MonoL vs MonoR: left-eye log-odds estimate=-0.29941, p=4.9148e-12; interaction p=0.78974
+  nonStim MonoL vs Bino: left-eye log-odds estimate=0.00801, p=0.84048; interaction p=1.8937e-09

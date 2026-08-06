@@ -1,5 +1,5 @@
 Jim right-eye correct-rate comparison
-Generated: 17-Jul-2026 11:13:46
+Generated: 19-Jul-2026 12:29:18
 Behavior file: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\BehaviorFitting\BehaviorData_Jim.mat
 Output directory: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\BehaviorFitting\JimRightEyeCorrectRate
 Analyzed blocks: nonStim
