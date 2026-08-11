@@ -8,19 +8,13 @@ if ~exist('monkey', 'var')
 end
 
 if ~exist('data_file', 'var')
-    data_file = 'C:\EM\BehaviorFitting\unit_table_gof.mat';
+    data_file = '';
 end
 
 monkey = validatestring(monkey, {'Both', 'Jim', 'Clay'});
 
-data = load(data_file);
-if isfield(data, 'unit_table_gof')
-    unit_table = data.unit_table_gof;
-elseif isfield(data, 'unit_table')
-    unit_table = data.unit_table;
-else
-    error('The file "%s" does not contain unit_table_gof or unit_table.', data_file);
-end
+[unit_table, data_file, workbook_audit] = ...
+    LoadLatestUnitTableGof(data_file);
 
 bias_table_mt = build_bias_table(unit_table, 'MT');
 bias_table_fst = build_bias_table(unit_table, 'FST');
@@ -41,6 +35,8 @@ model2_result = build_all_cues_flipped_model(bias_table);
 model3_result = build_perspective_flipped_model(bias_table);
 
 comparison_results = struct();
+comparison_results.data_file = data_file;
+comparison_results.workbook_audit = workbook_audit;
 comparison_results.monkey = monkey;
 comparison_results.bias_table_2d = bias_table;
 comparison_results.model1_per_cue = model1_summary;
@@ -68,6 +64,8 @@ assignin('base', 'MT_FST_2D_model3_summary', model3_result.Summary);
 
 function bias_table = build_bias_table(unit_table, area)
 condition_names = {'Dominant', 'Combined', 'Stereo', 'NonDominant'};
+[delta_bias, bias_nonstim, bias_stim, valid_bias_fit] = ...
+    CalculateSigmoidFitBiases(unit_table, 4);
 
 row_count = height(unit_table);
 max_rows = row_count * 4;
@@ -104,11 +102,6 @@ for rec = 1:row_count
     z_value = unit_table.Z3D_v_Z2D{rec};
     monkey_name = get_table_text(unit_table.Monkey(rec));
     monkey_code = monkey_to_code(monkey_name);
-    behav_bias_n = get_row_vector_from_cell(unit_table, 'Behav_bias_N', rec);
-    behav_bias_s = get_row_vector_from_cell(unit_table, 'Behav_bias_S', rec);
-    goodfit_n = get_logical_row_from_cell(unit_table, 'Behav_goodfit_N', rec);
-    goodfit_s = get_logical_row_from_cell(unit_table, 'Behav_goodfit_S', rec);
-
     if od_max > 0
         cond_order = [2, 1, 4, 3];
         od_eye = "L";
@@ -125,11 +118,12 @@ for rec = 1:row_count
             continue
         end
 
-        [include_curve, bias_n_this, bias_s_this] = get_behavior_curve_bias( ...
-            behav_bias_n, behav_bias_s, goodfit_n, goodfit_s, source_idx);
-        if ~include_curve
+        if ~valid_bias_fit(rec, source_idx)
             continue
         end
+
+        bias_n_this = bias_nonstim(rec, source_idx);
+        bias_s_this = bias_stim(rec, source_idx);
 
         write_idx = write_idx + 1;
 
@@ -137,7 +131,7 @@ for rec = 1:row_count
         OD_raw(write_idx) = od_max;
         Condition(write_idx) = cond;
         z2D3D(write_idx) = z_value;
-        Bias(write_idx) = bias_n_this - bias_s_this;
+        Bias(write_idx) = delta_bias(rec, source_idx);
         UnitIndex(write_idx) = rec;
         MonkeyCode(write_idx) = monkey_code;
         AP(write_idx) = ap_value;
@@ -325,65 +319,6 @@ switch monkey_name
     otherwise
         error('Wrong monkey name: %s', monkey_name)
 end
-end
-
-
-function row_values = get_row_vector_from_cell(unit_table, var_name, rec)
-row_values = nan(1, 4);
-
-if ~ismember(var_name, unit_table.Properties.VariableNames)
-    return
-end
-
-cell_value = unit_table.(var_name){rec};
-if isempty(cell_value)
-    return
-end
-
-cell_value = cell_value(:)';
-row_values(1:min(4, numel(cell_value))) = cell_value(1:min(4, numel(cell_value)));
-end
-
-
-function row_values = get_logical_row_from_cell(unit_table, var_name, rec)
-row_values = false(1, 4);
-
-if ~ismember(var_name, unit_table.Properties.VariableNames)
-    return
-end
-
-cell_value = unit_table.(var_name){rec};
-if isempty(cell_value)
-    return
-end
-
-cell_value = logical(cell_value(:)');
-row_values(1:min(4, numel(cell_value))) = cell_value(1:min(4, numel(cell_value)));
-end
-
-
-function [include_curve, bias_n_this, bias_s_this] = get_behavior_curve_bias(behav_bias_n, behav_bias_s, goodfit_n, goodfit_s, source_idx)
-include_curve = false;
-bias_n_this = nan;
-bias_s_this = nan;
-
-if source_idx > numel(behav_bias_n) || source_idx > numel(behav_bias_s) || ...
-        source_idx > numel(goodfit_n) || source_idx > numel(goodfit_s)
-    return
-end
-
-if ~(goodfit_n(source_idx) && goodfit_s(source_idx))
-    return
-end
-
-bias_n_this = behav_bias_n(source_idx);
-bias_s_this = behav_bias_s(source_idx);
-
-if ~(isfinite(bias_n_this) && isfinite(bias_s_this))
-    return
-end
-
-include_curve = true;
 end
 
 

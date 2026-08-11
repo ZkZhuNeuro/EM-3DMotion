@@ -1,0 +1,13 @@
+[Warning: Name is nonexistent or not a directory: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\util] 
+[> In path (line 109)
+In addpath (line 96)
+In startup (line 3)] 
+{Subscripted assignment between dissimilar structures.
+
+Error in diagnose_jim_roi (line 21)
+    coronal(end + 1) = item; %#ok<SAGROW>
+    ^^^^^^^^^^^^^^^^
+Error in run (line 112)
+evalin('caller', strcat(scriptStem, ';'));
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+} 

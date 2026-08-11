@@ -1,0 +1,31 @@
+result_path = 'C:\EM\RecordingLocationPlots\Clay\OptimizedOblique\Clay_MT-FST_ObliqueResults.mat';
+loaded = load(result_path, 'current_session', 'maximum_session', 'robust_session', 'data', 'cfg');
+points = loaded.data.points;
+atlas = flip(double(niftiread(loaded.cfg.atlasPath)), 1);
+planes = {loaded.current_session, loaded.maximum_session, loaded.robust_session};
+names = {'current', 'highest', 'robust'};
+
+for p = 1:numel(planes)
+    plane = planes{p};
+    n = plane.normal / norm(plane.normal);
+    u_basis = [0 0 1] - dot([0 0 1], n) * n;
+    u_basis = u_basis / norm(u_basis);
+    v_basis = cross(n, u_basis);
+    if dot(v_basis, [0 -1 0]) < 0, v_basis = -v_basis; end
+    relative = points - plane.center;
+    point_u = relative * u_basis.';
+    point_v = relative * v_basis.';
+    for step = [1, 0.5, 0.25]
+        u_values = floor(min(point_u)-20):step:ceil(max(point_u)+20);
+        v_values = floor(min(point_v)-20):step:ceil(max(point_v)+20);
+        [ug, vg] = meshgrid(u_values, v_values);
+        qi = plane.center(1) + ug*u_basis(1) + vg*v_basis(1);
+        qj = plane.center(2) + ug*u_basis(2) + vg*v_basis(2);
+        qk = plane.center(3) + ug*u_basis(3) + vg*v_basis(3);
+        roi_slice = interpn(atlas, qi, qj, qk, 'nearest', 0);
+        displayed = interp2(u_values, v_values, roi_slice, point_u, point_v, 'nearest', 0);
+        mismatch = displayed(:) ~= plane.sampledLabels(:);
+        fprintf('%s step %.2f: mismatch %d/%d, indices %s\n', names{p}, step, ...
+            nnz(mismatch), numel(mismatch), mat2str(find(mismatch).'));
+    end
+end

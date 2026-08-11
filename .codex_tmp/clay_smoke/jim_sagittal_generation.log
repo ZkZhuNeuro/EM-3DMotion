@@ -1,0 +1,36 @@
+[Warning: Name is nonexistent or not a directory: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\util] 
+[> In path (line 109)
+In addpath (line 96)
+In startup (line 3)] 
+Jim occupied sagittal ML voxels: [87 88 89 90 91 92 93 94 95 96 97 98 99]
+Jim intermediate sagittal ML voxels: zeros(1,0)
+Generated Jim MT and FST sagittal projections for ML voxel 87.
+Generated Jim MT and FST sagittal projections for ML voxel 88.
+Generated Jim MT and FST sagittal projections for ML voxel 89.
+Generated Jim MT and FST sagittal projections for ML voxel 90.
+Generated Jim MT and FST sagittal projections for ML voxel 91.
+Generated Jim MT and FST sagittal projections for ML voxel 92.
+Generated Jim MT and FST sagittal projections for ML voxel 93.
+Generated Jim MT and FST sagittal projections for ML voxel 94.
+Generated Jim MT and FST sagittal projections for ML voxel 95.
+Generated Jim MT and FST sagittal projections for ML voxel 96.
+Generated Jim MT and FST sagittal projections for ML voxel 97.
+Generated Jim MT and FST sagittal projections for ML voxel 98.
+Generated Jim MT and FST sagittal projections for ML voxel 99.
+Removed Error writing to output stream.
+iostream stream error
+{Error using fprintf
+Error writing to output stream.
+iostream stream error
+
+
+Error in generate_jim_recording_location_plots>cleanupGeneratedFilesLocal (line 375)
+fprintf('Removed %d obsolete generated files from %s.\n', removed_count, folder_path);
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error in generate_jim_recording_location_plots (line 256)
+    cleanupGeneratedFilesLocal(sagittal_dir, ...
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error in run (line 112)
+evalin('caller', strcat(scriptStem, ';'));
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+} 

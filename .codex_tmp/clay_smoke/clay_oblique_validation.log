@@ -1,0 +1,9 @@
+Unique XYZ coordinates: 91; unique coordinate-label sites: 91; conflicting XYZ: 0
+Best session score: MT 40/40 FST 61/62 total 101/102
+Best unique-site score: MT 38/38 FST 52/53 total 90/91
+Perturbations within +/-1 deg and +/-0.5 mm (offset +/-1 voxel):
+  total correct min/median/max = 82 / 97.0 / 101
+  MT correct min/median/max = 23 / 38.0 / 40
+  FST correct min/median/max = 56 / 60.0 / 61
+Robust center normal=[0.44619781 0.67026621 0.59300145] offset=0.671 worst=87 mean=91.96
+Robust center counts: MT 39/40 FST 60/62 total 99/102; max dist 2.833 vox

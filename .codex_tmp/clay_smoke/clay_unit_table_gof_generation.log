@@ -1,0 +1,31 @@
+Clay unit_table_gof regeneration started: 07-Aug-2026 09:53:20
+Generated 10/102 plots.
+Generated 20/102 plots.
+Generated 30/102 plots.
+Generated 40/102 plots.
+Generated 50/102 plots.
+Generated 60/102 plots.
+Generated 70/102 plots.
+Generated 80/102 plots.
+Generated 90/102 plots.
+Generated 100/102 plots.
+Generated 102/102 plots.
+Successfully generated Error writing to output stream.
+iostream stream error
+Error using fprintf
+Error writing to output stream.
+iostream stream error
+
+
+Error in generate_clay_analysis_plots (line 128)
+fprintf('Successfully generated %d included-session plots in %s\n', ...
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error in run (line 112)
+evalin('caller', strcat(scriptStem, ';'));
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error in regenerate_clay_unit_table_gof (line 5)
+    run('C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\.codex_tmp\clay_smoke\generate_clay_analysis_plots.m');
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error in run (line 112)
+evalin('caller', strcat(scriptStem, ';'));
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

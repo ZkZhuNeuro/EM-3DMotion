@@ -1,0 +1,25 @@
+{Unrecognized function or variable 'getWorkbookRowsFromUnitTableGof'.
+
+Error in search_clay_oblique_plane>loadClayPoints (line 181)
+[rows, ~] = getWorkbookRowsFromUnitTableGof(tb, 'Clay');
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error in search_clay_oblique_plane (line 8)
+[points, labels] = loadClayPoints();
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error in run (line 112)
+evalin('caller', strcat(scriptStem, ';'));
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+} 
+Current x=165: 34/40 MT, 39/62 FST, total 73, max distance 4.400 vox
+Best translated sagittal: x=166.200, 33/40 MT, 45/62 FST, total 78, max 4.800
+Coarse best: tilt 62.000 azimuth 42.000 offset 0.771; MT 40/40 FST 61/62 total 101 max 3.030 mean 0.901
+Refined best: normal=[0.42261826 0.65741244 0.62386111] center=[165.78538 141.74127 60.963478] tilt 65.000 azimuth 43.500 offset 0.671
+Refined counts: MT 40/40 (100.0%), FST 61/62 (98.4%), total 101/102 (99.0%), balanced 0.9919
+Projection distances: mean 0.831 vox (0.415 mm), max 3.005 vox (1.502 mm)
+Current x=165: 32/38 MT, 32/53 FST, total 64, max distance 4.400 vox
+Best translated sagittal: x=166.200, 31/38 MT, 38/53 FST, total 69, max 4.800
+Coarse best: tilt 62.000 azimuth 42.000 offset 0.776; MT 38/38 FST 52/53 total 90 max 3.030 mean 0.922
+Refined best: normal=[0.42261826 0.65741244 0.62386111] center=[165.79104 141.91055 60.770963] tilt 65.000 azimuth 43.500 offset 0.676
+Refined counts: MT 38/38 (100.0%), FST 52/53 (98.1%), total 90/91 (98.9%), balanced 0.9906
+Projection distances: mean 0.855 vox (0.428 mm), max 2.998 vox (1.499 mm)
+Session evaluation of unique-site optimum: MT 40/40 FST 61/62 total 101/102

@@ -1382,6 +1382,9 @@ unit_table_gof.Behav_goodfit_both = num2cell(goodfit_idx_S & goodfit_idx_N, 2);
 Behav_bias_N = nan(height(unit_table), 4);
 Behav_bias_S = nan(height(unit_table), 4);
 Behav_bias_NminusS = nan(height(unit_table), 4);
+Behav_slope_N = nan(height(unit_table), 4);
+Behav_slope_S = nan(height(unit_table), 4);
+Behav_slope_NminusS = nan(height(unit_table), 4);
 Behav_propTowardMat_N = cell(height(unit_table), 1);
 Behav_propTowardMat_S = cell(height(unit_table), 1);
 
@@ -1408,6 +1411,13 @@ for i_rec = 1:height(unit_table)
         b1 = beta_full(2);
         b2 = beta_full(3);
         b3 = beta_full(4);
+
+        % Logit slopes from y ~ coh + s + coh:s. With s = 0 for
+        % non-stimulation and s = 1 for stimulation, the corresponding
+        % coherence slopes are b1 and b1 + b3.
+        Behav_slope_N(i_rec, i_cue) = b1;
+        Behav_slope_S(i_rec, i_cue) = b1 + b3;
+        Behav_slope_NminusS(i_rec, i_cue) = -b3;
 
         if abs(b1) > 1e-10
             Behav_bias_N(i_rec, i_cue) = -b0 / b1;
@@ -1451,6 +1461,9 @@ end
 unit_table_gof.Behav_bias_N = num2cell(Behav_bias_N, 2);
 unit_table_gof.Behav_bias_S = num2cell(Behav_bias_S, 2);
 unit_table_gof.Behav_bias_NminusS = num2cell(Behav_bias_NminusS, 2);
+unit_table_gof.Behav_slope_N = num2cell(Behav_slope_N, 2);
+unit_table_gof.Behav_slope_S = num2cell(Behav_slope_S, 2);
+unit_table_gof.Behav_slope_NminusS = num2cell(Behav_slope_NminusS, 2);
 unit_table_gof.Behav_propTowardMat_N = Behav_propTowardMat_N;
 unit_table_gof.Behav_propTowardMat_S = Behav_propTowardMat_S;
 unit_table_gof.Behav_coh_levels = repmat({poorFitCoh}, height(unit_table), 1);

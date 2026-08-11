@@ -1,0 +1,11 @@
+[Warning: Name is nonexistent or not a directory: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\ExampleSessions\util] 
+[> In path (line 109)
+In addpath (line 96)
+In startup (line 3)] 
+Exported 2 example-session figure(s) to C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\.codex_tmp\example_session_plot_test\plots4
+    SessionIndex                       SessionLabel                        StimElectrode                                                               PNG                                                                                                                          PDF                                                           
+    ____________    ___________________________________________________    _____________    _________________________________________________________________________________________________________________________    _________________________________________________________________________________________________________________________
+
+         1          "Session 1 | J | M | 2021-07-14 | stim electrode 1"          1          "C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\.codex_tmp\example_session_plot_test\plots4\001_J_M_2021-07-14_stim01.png"    "C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\.codex_tmp\example_session_plot_test\plots4\001_J_M_2021-07-14_stim01.pdf"
+         2          "Session 2 | C | F | 2026-02-17 | stim electrode 2"          2          "C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\.codex_tmp\example_session_plot_test\plots4\002_C_F_2026-02-17_stim02.png"    "C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\.codex_tmp\example_session_plot_test\plots4\002_C_F_2026-02-17_stim02.pdf"
+

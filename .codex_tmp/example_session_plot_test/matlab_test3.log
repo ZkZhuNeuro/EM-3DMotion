@@ -1,0 +1,7 @@
+[Warning: Name is nonexistent or not a directory: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\ExampleSessions\util] 
+[> In path (line 109)
+In addpath (line 96)
+In startup (line 3)] 
+{Error using PlotExampleSessions (line 35)
+Formats must contain only "png" and/or "pdf".
+} 

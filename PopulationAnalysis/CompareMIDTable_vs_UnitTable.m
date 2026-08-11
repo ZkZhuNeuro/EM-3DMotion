@@ -2,13 +2,14 @@
 % Edit the two file paths below if needed, then run this script.
 
 midtable_file = 'C:\EM\PopulationAnalysis\MIDTable_20260513.mat';
-unittable_file = 'C:\EM\PopulationAnalysis\UnitTable_updating.mat';
+unittable_file = '';
 
 mid_info = load_first_table_from_mat(midtable_file, {'MIDTable'});
-unit_info = load_first_table_from_mat(unittable_file, {'unit_table', 'unit_table_gof'});
+[unit_table, unittable_file] = LoadLatestUnitTableGof(unittable_file);
+unit_info = struct('File', unittable_file, ...
+    'VariableName', 'unit_table_gof', 'Table', unit_table);
 
 MIDTable = mid_info.Table;
-unit_table = unit_info.Table;
 
 key_columns = choose_session_key_columns(MIDTable, unit_table);
 

@@ -1,0 +1,156 @@
+Jim unit_table_gof regeneration started: 07-Aug-2026 12:32:27
+Generated 10/149 Jim session plots.
+Generated 20/149 Jim session plots.
+Generated 30/149 Jim session plots.
+Generated 40/149 Jim session plots.
+Generated 50/149 Jim session plots.
+Generated 60/149 Jim session plots.
+Generated 70/149 Jim session plots.
+Generated 80/149 Jim session plots.
+Generated 90/149 Jim session plots.
+Generated 100/149 Jim session plots.
+Generated 110/149 Jim session plots.
+Generated 120/149 Jim session plots.
+Generated 130/149 Jim session plots.
+Generated 140/149 Jim session plots.
+Generated 149/149 Jim session plots.
+Removed 0 obsolete generated files from C:\EM\RecordingLocationPlots\Jim.
+Jim occupied AP voxels: [50 52 54 55 57 58 60 62 63 65 66 68]
+Jim intermediate AP voxels: [51 53 56 59 61 64 67]
+Generated Jim MT and FST coronal projection(s) for AP voxel 50.
+Generated Jim MT and FST coronal projection(s) for AP voxel 51.
+Generated Jim MT and FST coronal projection(s) for AP voxel 52.
+Generated Jim MT and FST coronal projection(s) for AP voxel 53.
+Generated Jim MT and FST coronal projection(s) for AP voxel 54.
+Generated Jim MT and FST coronal projection(s) for AP voxel 55.
+Generated Jim MT and FST coronal projection(s) for AP voxel 56.
+Generated Jim MT and FST coronal projection(s) for AP voxel 57.
+Generated Jim MT and FST coronal projection(s) for AP voxel 58.
+Generated Jim MT and FST coronal projection(s) for AP voxel 59.
+Generated Jim MT and FST coronal projection(s) for AP voxel 60.
+Generated Jim MT and FST coronal projection(s) for AP voxel 61.
+Generated Jim MT and FST coronal projection(s) for AP voxel 62.
+Generated Jim MT and FST coronal projection(s) for AP voxel 63.
+Generated Jim MT and FST coronal projection(s) for AP voxel 64.
+Generated Jim MT and FST coronal projection(s) for AP voxel 65.
+Generated Jim MT and FST coronal projection(s) for AP voxel 66.
+Generated Jim MT and FST coronal projection(s) for AP voxel 67.
+Generated Jim MT and FST coronal projection(s) for AP voxel 68.
+Removed 0 obsolete generated files from C:\EM\RecordingLocationPlots\Jim\ProjectedByY.
+Removed 0 obsolete generated files from C:\EM\RecordingLocationPlots\Jim\ProjectedByY.
+Jim occupied sagittal ML voxels: [85 87 88 89 90 91 92 93 94 95 96 97 98 99]
+Jim intermediate sagittal ML voxels: 86
+Generated combined Jim MT and FST sagittal projection for ML voxel 85.
+Generated combined Jim MT and FST sagittal projection for ML voxel 86.
+Generated combined Jim MT and FST sagittal projection for ML voxel 87.
+Generated combined Jim MT and FST sagittal projection for ML voxel 88.
+Generated combined Jim MT and FST sagittal projection for ML voxel 89.
+Generated combined Jim MT and FST sagittal projection for ML voxel 90.
+Generated combined Jim MT and FST sagittal projection for ML voxel 91.
+Generated combined Jim MT and FST sagittal projection for ML voxel 92.
+Generated combined Jim MT and FST sagittal projection for ML voxel 93.
+Generated combined Jim MT and FST sagittal projection for ML voxel 94.
+Generated combined Jim MT and FST sagittal projection for ML voxel 95.
+Generated combined Jim MT and FST sagittal projection for ML voxel 96.
+Generated combined Jim MT and FST sagittal projection for ML voxel 97.
+Generated combined Jim MT and FST sagittal projection for ML voxel 98.
+Generated combined Jim MT and FST sagittal projection for ML voxel 99.
+Removed 5 obsolete generated files from C:\EM\RecordingLocationPlots\Jim\ProjectedSagittal.
+Jim recording-location plotting completed.
+Jim unit_table_gof regeneration completed: 07-Aug-2026 12:37:45
+Jim unit_table_gof regeneration started: 07-Aug-2026 13:33:12
+Generated 10/149 Jim session plots.
+Generated 20/149 Jim session plots.
+Generated 30/149 Jim session plots.
+Generated 40/149 Jim session plots.
+Generated 50/149 Jim session plots.
+Generated 60/149 Jim session plots.
+Generated 70/149 Jim session plots.
+Generated 80/149 Jim session plots.
+Generated 90/149 Jim session plots.
+Generated 100/149 Jim session plots.
+Generated 110/149 Jim session plots.
+Generated 120/149 Jim session plots.
+Generated 130/149 Jim session plots.
+Generated 140/149 Jim session plots.
+Generated 149/149 Jim session plots.
+Removed Error writing to output stream.
+iostream stream error
+Error using fprintf
+Error writing to output stream.
+iostream stream error
+
+
+Error in generate_jim_recording_location_plots>cleanupGeneratedFilesLocal (line 395)
+fprintf('Removed %d obsolete generated files from %s.\n', removed_count, folder_path);
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error in generate_jim_recording_location_plots (line 138)
+        cleanupGeneratedFilesLocal(output_root, 'Jim_*_Hole_*.png', generated_session_files);
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error in run (line 112)
+evalin('caller', strcat(scriptStem, ';'));
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error in regenerate_jim_unit_table_gof (line 9)
+    run('C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\.codex_tmp\clay_smoke\generate_jim_recording_location_plots.m');
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error in run (line 112)
+evalin('caller', strcat(scriptStem, ';'));
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Jim unit_table_gof regeneration started: 07-Aug-2026 14:06:06
+Generated 10/149 Jim session plots.
+Generated 20/149 Jim session plots.
+Generated 30/149 Jim session plots.
+Generated 40/149 Jim session plots.
+Generated 50/149 Jim session plots.
+Generated 60/149 Jim session plots.
+Generated 70/149 Jim session plots.
+Generated 80/149 Jim session plots.
+Generated 90/149 Jim session plots.
+Generated 100/149 Jim session plots.
+Generated 110/149 Jim session plots.
+Generated 120/149 Jim session plots.
+Generated 130/149 Jim session plots.
+Generated 140/149 Jim session plots.
+Generated 149/149 Jim session plots.
+Removed 0 obsolete generated files from C:\EM\RecordingLocationPlots\Jim.
+Jim occupied AP voxels: [50 52 54 55 57 58 60 62 63 64 65 66 67 68]
+Jim intermediate AP voxels: [51 53 56 59 61]
+Generated Jim MT and FST coronal projection(s) for AP voxel 50.
+Generated Jim MT and FST coronal projection(s) for AP voxel 51.
+Generated Jim MT and FST coronal projection(s) for AP voxel 52.
+Generated Jim MT and FST coronal projection(s) for AP voxel 53.
+Generated Jim MT and FST coronal projection(s) for AP voxel 54.
+Generated Jim MT and FST coronal projection(s) for AP voxel 55.
+Generated Jim MT and FST coronal projection(s) for AP voxel 56.
+Generated Jim MT and FST coronal projection(s) for AP voxel 57.
+Generated Jim MT and FST coronal projection(s) for AP voxel 58.
+Generated Jim MT and FST coronal projection(s) for AP voxel 59.
+Generated Jim MT and FST coronal projection(s) for AP voxel 60.
+Generated Jim MT and FST coronal projection(s) for AP voxel 61.
+Generated Jim MT and FST coronal projection(s) for AP voxel 62.
+Generated Jim MT and FST coronal projection(s) for AP voxel 63.
+Generated Jim MT and FST coronal projection(s) for AP voxel 64.
+Generated Jim MT and FST coronal projection(s) for AP voxel 65.
+Generated Jim MT and FST coronal projection(s) for AP voxel 66.
+Generated Jim MT and FST coronal projection(s) for AP voxel 67.
+Generated Jim MT and FST coronal projection(s) for AP voxel 68.
+Removed 0 obsolete generated files from C:\EM\RecordingLocationPlots\Jim\ProjectedByY.
+Removed 0 obsolete generated files from C:\EM\RecordingLocationPlots\Jim\ProjectedByY.
+Jim occupied sagittal ML voxels: [87 88 89 90 91 92 93 94 95 96 97 98 99]
+Jim intermediate sagittal ML voxels: zeros(1,0)
+Generated combined Jim MT and FST sagittal projection for ML voxel 87.
+Generated combined Jim MT and FST sagittal projection for ML voxel 88.
+Generated combined Jim MT and FST sagittal projection for ML voxel 89.
+Generated combined Jim MT and FST sagittal projection for ML voxel 90.
+Generated combined Jim MT and FST sagittal projection for ML voxel 91.
+Generated combined Jim MT and FST sagittal projection for ML voxel 92.
+Generated combined Jim MT and FST sagittal projection for ML voxel 93.
+Generated combined Jim MT and FST sagittal projection for ML voxel 94.
+Generated combined Jim MT and FST sagittal projection for ML voxel 95.
+Generated combined Jim MT and FST sagittal projection for ML voxel 96.
+Generated combined Jim MT and FST sagittal projection for ML voxel 97.
+Generated combined Jim MT and FST sagittal projection for ML voxel 98.
+Generated combined Jim MT and FST sagittal projection for ML voxel 99.
+Removed 0 obsolete generated files from C:\EM\RecordingLocationPlots\Jim\ProjectedSagittal.
+Jim recording-location plotting completed.
+Jim unit_table_gof regeneration completed: 07-Aug-2026 14:10:54

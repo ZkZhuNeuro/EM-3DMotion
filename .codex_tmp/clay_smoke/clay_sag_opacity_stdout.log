@@ -1,0 +1,17 @@
+[Warning: Name is nonexistent or not a directory: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\util] 
+[> In path (line 109)
+In addpath (line 96)
+In startup (line 3)] 
+Occupied MRI ML voxels: [160 162 163 164 165 166 167 168]
+Intermediate MRI ML voxels: 161
+Generated combined MT and FST sagittal projection for ML voxel 160 (recorded grid X 19).
+Generated combined MT and FST sagittal projection for ML voxel 161 (hidden between ML voxels 160 and 162 (grid X 19 to 20)).
+Generated combined MT and FST sagittal projection for ML voxel 162 (recorded grid X 20).
+Generated combined MT and FST sagittal projection for ML voxel 163 (recorded grid X 21).
+Generated combined MT and FST sagittal projection for ML voxel 164 (recorded grid X 21,22).
+Generated combined MT and FST sagittal projection for ML voxel 165 (recorded grid X 22).
+Generated combined MT and FST sagittal projection for ML voxel 166 (recorded grid X 23).
+Generated combined MT and FST sagittal projection for ML voxel 167 (recorded grid X 23).
+Generated combined MT and FST sagittal projection for ML voxel 168 (recorded grid X 24).
+Successfully generated 9 sagittal projections across 9 consecutive MRI slices in C:\EM\RecordingLocationPlots\Clay\ProjectedSagittal
+Removed 0 obsolete sagittal projections.

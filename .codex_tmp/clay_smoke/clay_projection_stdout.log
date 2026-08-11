@@ -1,0 +1,34 @@
+[Warning: Name is nonexistent or not a directory: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\util] 
+[> In path (line 109)
+In addpath (line 96)
+In startup (line 3)] 
+Grid rows map to AP voxels: [54 55 57 58 60 62 63 65 66]
+Intermediate AP voxels: [56 59 61 64]
+Generated MT and FST projections for AP voxel 54 (grid Y 20).
+Generated MT and FST projections for AP voxel 55 (grid Y 21).
+Generated MT and FST projections for AP voxel 56 (hidden between grid Y 21 and 22).
+Generated MT and FST projections for AP voxel 57 (grid Y 22).
+Generated MT and FST projections for AP voxel 58 (grid Y 23).
+Generated MT and FST projections for AP voxel 59 (hidden between grid Y 23 and 24).
+Generated MT and FST projections for AP voxel 60 (grid Y 24).
+Generated MT and FST projections for AP voxel 61 (hidden between grid Y 24 and 25).
+Generated MT and FST projections for AP voxel 62 (grid Y 25).
+Generated MT and FST projections for AP voxel 63 (grid Y 26).
+Generated MT and FST projections for AP voxel 64 (hidden between grid Y 26 and 27).
+Generated MT and FST projections for AP voxel 65 (grid Y 27).
+Generated MT and FST projections for AP voxel 66 (grid Y 28).
+Successfully generated 26 projected plots across 13 consecutive MRI slices in C:\EM\RecordingLocationPlots\Clay\ProjectedByY
+Removed 0 obsolete projected plots.
+Occupied MRI ML voxels: [160 162 163 164 165 166 167 168]
+Intermediate MRI ML voxels: 161
+Generated MT and FST sagittal projections for ML voxel 160 (recorded grid X 19).
+Generated MT and FST sagittal projections for ML voxel 161 (hidden between ML voxels 160 and 162 (grid X 19 to 20)).
+Generated MT and FST sagittal projections for ML voxel 162 (recorded grid X 20).
+Generated MT and FST sagittal projections for ML voxel 163 (recorded grid X 21).
+Generated MT and FST sagittal projections for ML voxel 164 (recorded grid X 21,22).
+Generated MT and FST sagittal projections for ML voxel 165 (recorded grid X 22).
+Generated MT and FST sagittal projections for ML voxel 166 (recorded grid X 23).
+Generated MT and FST sagittal projections for ML voxel 167 (recorded grid X 23).
+Generated MT and FST sagittal projections for ML voxel 168 (recorded grid X 24).
+Successfully generated 18 sagittal projections across 9 consecutive MRI slices in C:\EM\RecordingLocationPlots\Clay\ProjectedSagittal
+Removed 0 obsolete sagittal projections.

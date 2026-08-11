@@ -1,0 +1,21 @@
+[Warning: Name is nonexistent or not a directory: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\util] 
+[> In path (line 109)
+In addpath (line 96)
+In startup (line 3)] 
+Jim occupied sagittal ML voxels: [87 88 89 90 91 92 93 94 95 96 97 98 99]
+Jim intermediate sagittal ML voxels: zeros(1,0)
+Generated combined Jim MT and FST sagittal projection for ML voxel 87.
+Generated combined Jim MT and FST sagittal projection for ML voxel 88.
+Generated combined Jim MT and FST sagittal projection for ML voxel 89.
+Generated combined Jim MT and FST sagittal projection for ML voxel 90.
+Generated combined Jim MT and FST sagittal projection for ML voxel 91.
+Generated combined Jim MT and FST sagittal projection for ML voxel 92.
+Generated combined Jim MT and FST sagittal projection for ML voxel 93.
+Generated combined Jim MT and FST sagittal projection for ML voxel 94.
+Generated combined Jim MT and FST sagittal projection for ML voxel 95.
+Generated combined Jim MT and FST sagittal projection for ML voxel 96.
+Generated combined Jim MT and FST sagittal projection for ML voxel 97.
+Generated combined Jim MT and FST sagittal projection for ML voxel 98.
+Generated combined Jim MT and FST sagittal projection for ML voxel 99.
+Removed 26 obsolete generated files from C:\EM\RecordingLocationPlots\Jim\ProjectedSagittal.
+Jim recording-location plotting completed.

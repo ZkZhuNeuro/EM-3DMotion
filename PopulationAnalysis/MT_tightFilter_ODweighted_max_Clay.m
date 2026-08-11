@@ -1,5 +1,7 @@
 clear; close all
-load('UnitTable_updating.mat')
+[unit_table, unit_table_gof_file] = LoadLatestUnitTableGof();
+delta_bias_sigmoid = CalculateSigmoidFitBiases(unit_table, 4);
+fprintf('Using unit_table_gof: %s\n', unit_table_gof_file);
 
 colorsteps = [254 191 15;...
     0 0 0;...
@@ -13,7 +15,7 @@ for rec = 1:size(unit_table, 1)
     if unit_table.p_AI{rec}(2) < 0.05 && unit_table.p_AI{rec}(3) < 0.05 && strcmp(cell2mat(unit_table.ROI(rec)), 'MT')
         n_MT = n_MT + 1; 
         ch = unit_table.StimElec(rec);
-        MIDTable.Delta_bias{:, n_MT} = unit_table.Delta_bias{rec};
+        MIDTable.Delta_bias{:, n_MT} = delta_bias_sigmoid(rec, :);
         MIDTable.AI{n_MT} = unit_table.AI{rec}(:, ch);
         MIDTable.OD_max{n_MT} = unit_table.OD_max{rec};
         MIDTable.Z3D_v_Z2D{n_MT} = unit_table.Z3D_v_Z2D{rec};

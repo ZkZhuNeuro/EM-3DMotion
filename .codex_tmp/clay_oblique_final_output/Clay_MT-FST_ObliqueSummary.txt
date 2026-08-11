@@ -1,0 +1,29 @@
+Clay MT/FST oblique-section optimization
+Generated: 2026-08-07 14:46:33
+
+Important interpretation
+The oblique view was optimized using the MT/FST workbook labels. Use it as a label-optimized visualization, not independent anatomical validation of those labels.
+
+Current sagittal projection (array i = 165)
+  MT 34/40; FST 39/62; total 73/102
+
+Native 3-D atlas sampling
+  MT 38/40; FST 54/62; total 92/102
+
+Maximum-match oblique plane
+  normal [ML DV AP] = [0.42261826 0.65741244 0.62386111]
+  center [i j k]    = [165.79104 141.91055 60.770963]
+  tilt/azimuth      = 65.000 / 43.500 degrees
+  MT 40/40; FST 61/62; total 101/102
+  mean/max |distance| = 0.414 / 1.499 mm
+
+Recommended robust oblique plane
+  normal [ML DV AP] = [0.4539905 0.65428615 0.60481589]
+  center [i j k]    = [165.69874 141.74487 60.606891]
+  tilt/azimuth      = 63.000 / 42.750 degrees
+  MT 39/40; FST 60/62; total 99/102
+  mean/max |distance| = 0.355 / 1.364 mm
+  robust worst unique-site class accuracy = 75.5%
+  robust median unique-site balanced accuracy = 90.2%
+
+Unique coordinate-label sites: 91 (38 MT, 53 FST)

@@ -1,0 +1,27 @@
+[Warning: Name is nonexistent or not a directory: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\util] 
+[> In path (line 109)
+In addpath (line 96)
+In startup (line 3)] 
+Jim occupied AP voxels: [50 52 54 55 57 58 60 62 63 65 66 68]
+Jim intermediate AP voxels: [51 53 56 59 61 64 67]
+Generated Jim MT and FST coronal projections for AP voxel 50.
+Generated Jim MT and FST coronal projections for AP voxel 51.
+Generated Jim MT and FST coronal projections for AP voxel 52.
+Generated Jim MT and FST coronal projections for AP voxel 53.
+Generated Jim MT and FST coronal projections for AP voxel 54.
+Generated Jim MT and FST coronal projections for AP voxel 55.
+Generated Jim MT and FST coronal projections for AP voxel 56.
+Generated Jim MT and FST coronal projections for AP voxel 57.
+Generated Jim MT and FST coronal projections for AP voxel 58.
+Generated Jim MT and FST coronal projections for AP voxel 59.
+Generated Jim MT and FST coronal projections for AP voxel 60.
+Generated Jim MT and FST coronal projections for AP voxel 61.
+Generated Jim MT and FST coronal projections for AP voxel 62.
+Generated Jim MT and FST coronal projections for AP voxel 63.
+Generated Jim MT and FST coronal projections for AP voxel 64.
+Generated Jim MT and FST coronal projections for AP voxel 65.
+Generated Jim MT and FST coronal projections for AP voxel 66.
+Generated Jim MT and FST coronal projections for AP voxel 67.
+Generated Jim MT and FST coronal projections for AP voxel 68.
+Removed 0 obsolete generated files from C:\EM\RecordingLocationPlots\Jim\ProjectedByY.
+Jim recording-location plotting completed.

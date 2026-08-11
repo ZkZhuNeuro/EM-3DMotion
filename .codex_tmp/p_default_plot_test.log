@@ -1,0 +1,13 @@
+[Warning: Name is nonexistent or not a directory: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\ExampleSessions\util] 
+[> In path (line 109)
+In addpath (line 96)
+In startup (line 3)] 
+[Warning: Variable 'MIDTable' not found.] 
+Exported 1 example-session figure(s) to C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\ExampleSessions\plots
+    SessionIndex                         SessionLabel                         StimElectrode                                                     PNG                                                                                                       PDF                                                      WorkbookRow
+    ____________    ______________________________________________________    _____________    ______________________________________________________________________________________________________    ______________________________________________________________________________________________________    ___________
+
+         1          "Session 1 | Jim | MT | 2021-07-21 | stim electrode 4"          4          "C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\ExampleSessions\plots\001_Jim_MT_2021-07-21_stim04.png"    "C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\ExampleSessions\plots\001_Jim_MT_2021-07-21_stim04.pdf"        26     
+
+{Error on flush.
+} 

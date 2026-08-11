@@ -1,0 +1,19 @@
+[Warning: Name is nonexistent or not a directory: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\util] 
+[> In path (line 109)
+In addpath (line 96)
+In startup (line 3)] 
+JIM_ANALYSIS_SESSION_COUNT=150
+JIM_SKIPPED_AFTER_CRITERIA_COUNT=Error writing to output stream.
+iostream stream error
+{Error using fprintf
+Error writing to output stream.
+iostream stream error
+
+
+Error in audit_jim_analysis_sessions (line 28)
+fprintf('JIM_SKIPPED_AFTER_CRITERIA_COUNT=%d\n', height(jim_skipped));
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error in run (line 112)
+evalin('caller', strcat(scriptStem, ';'));
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+} 

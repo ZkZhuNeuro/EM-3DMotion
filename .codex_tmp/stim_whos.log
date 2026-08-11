@@ -1,0 +1,21 @@
+[Warning: Name is nonexistent or not a directory: C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\ExampleSessions\util] 
+[> In path (line 109)
+In addpath (line 96)
+In startup (line 3)] 
+C:/Jim/StimData/20210714.mat
+  11×1 struct array with fields:
+
+    name
+    size
+    bytes
+    class
+    global
+    sparse
+    complex
+    nesting
+    persistent
+
+C:/Clay/StimData/20260217.mat
+{Error using whos
+Could not find C:\Clay\StimData\20260217.mat.
+} 
