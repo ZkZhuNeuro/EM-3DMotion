@@ -1,6 +1,6 @@
 %% Smoke test the first resolvable UnitTable session
 unitTableFile = 'C:\EM\PopulationAnalysis\UnitTable_updating.mat';
-outputRoot = fullfile(fileparts(mfilename('fullpath')), 'population_results_smoke');
+outputRoot = fullfile('C:\EM\Microsac', 'population_results_smoke');
 
 BatchResults = run_population_microsaccade_analysis(unitTableFile, ...
     'OutputRoot', outputRoot, ...

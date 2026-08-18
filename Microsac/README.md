@@ -16,7 +16,7 @@ The script reads:
 - `C:\EM\Microsac\Clay_FST_17Feb2026_3DMotionStim_MUA_TInfo.mat`
 - `C:\EM\Microsac\Clay_FST_17Feb2026_3DMotionStim_MUA_SelIndex.mat`
 
-Outputs are written to `results_engbert`:
+Outputs are written to `C:\EM\Microsac\results_engbert`:
 
 - `*_trials.csv`: one row per selected/good trial, including stimulation status and event counts
 - `*_events.csv`: one row per binocular microsaccade
@@ -68,11 +68,12 @@ BatchResults = run_population_microsaccade_analysis( ...
     'RequireBinocular', false);
 ```
 
-Population outputs default to `population_results`. Each recording has its own
-subfolder. The root folder contains a checkpointed session manifest and combined
-summary, direction-statistics, and Stim/NonStim permutation-test CSV files. The
-runner loads existing session MAT files by default, so rerunning the command
-resumes the batch. Set `'OverwriteExisting', true` to recompute them.
+Population outputs default to `C:\EM\Microsac\population_results`. Each
+recording has its own subfolder. The root folder contains a checkpointed session
+manifest and combined summary, direction-statistics, and Stim/NonStim
+permutation-test CSV files. The runner loads existing session MAT files by
+default, so rerunning the command resumes the batch. Set `'OverwriteExisting',
+true` to recompute them.
 
 The population runner uses 1,000 permutations by default. The command above uses
 the current sensitivity settings: no additional smoothing, a 6 ms minimum

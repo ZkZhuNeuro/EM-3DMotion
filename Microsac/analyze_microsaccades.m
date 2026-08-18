@@ -38,7 +38,7 @@ parser = inputParser;
 parser.FunctionName = mfilename;
 addRequired(parser, 'tInfoFile', @(x) ischar(x) || isstring(x));
 addRequired(parser, 'selIndexFile', @(x) ischar(x) || isstring(x));
-addParameter(parser, 'OutputDir', fullfile(fileparts(mfilename('fullpath')), 'results'), ...
+addParameter(parser, 'OutputDir', fullfile('C:\EM\Microsac', 'results'), ...
     @(x) ischar(x) || isstring(x));
 addParameter(parser, 'SmoothWindowMs', 5, @(x) isscalar(x) && x >= 0);
 addParameter(parser, 'VelocityThresholdLambda', 6, @(x) isscalar(x) && x > 0);

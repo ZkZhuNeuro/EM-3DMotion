@@ -1,7 +1,7 @@
 %% Example microsaccade analysis for the Clay FST session
 tInfoFile = 'C:\EM\Microsac\Clay_FST_17Feb2026_3DMotionStim_MUA_TInfo.mat';
 selIndexFile = 'C:\EM\Microsac\Clay_FST_17Feb2026_3DMotionStim_MUA_SelIndex.mat';
-outputDir = fullfile(fileparts(mfilename('fullpath')), 'results_engbert');
+outputDir = fullfile('C:\EM\Microsac', 'results_engbert');
 
 Results = analyze_microsaccades(tInfoFile, selIndexFile, ...
     'OutputDir', outputDir, ...
