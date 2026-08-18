@@ -1,61 +1,74 @@
-# FST pattern-tuning indices
+# Strict PDI/BODI analyses
 
-This analysis computes the requested perspective-versus-lateral response metrics for Lo's classified 3D FST population:
+This folder contains the source code for the strict FST3D, MT2D, and FST2D analyses. Generated results and figures are written outside GitHub to:
+
+```text
+C:\EM\PatternTuning\Final_128
+```
+
+Each population analysis produces separate Lo, EM, and combined results. Both datasets use the strict 1.28 classification criteria.
+
+## FST3D selection criteria
+
+Lo uses its complete 1.28 classifier:
 
 ```matlab
 ROI == "FST" & sig_Anova_CLR & Z_quad == 2
 ```
 
-`Z_quad == 2` is Lo's complete 1.28 classification, not merely a shorthand for `Z3D_v_Z2D > 1.28`. The original classifier first leaves a unit unclassified when both component-model Z scores are below 1.28; only after that gate does it classify a unit as 3D when the 3D-minus-2D Z-score difference exceeds 1.28. This reproduces the published 58/157 FST count (49 Jim, 9 Clay). Applying the difference cutoff alone incorrectly adds nine `Z_quad == 1` units whose 3D component Z score is below 1.28. The output still retains each unit's continuous `Z3D_v_Z2D` value for auditing.
+This selects 58 neurons. `Z_quad == 2` includes the original component-score gate and is not equivalent to applying only `Z3D_v_Z2D > 1.28`.
 
-## Source datasets
+EM uses the closest strict analogue supported by `unit_table_gof`:
 
-The runner uses three aligned population tables:
+```matlab
+ROI == "FST" & ND == "3D" & Z3D_v_Z2D > 1.28
+```
 
-- `C:\LoData\NeuroRespUnitTable.mat` (`NeuroRespUnitTable`) for trial/block-level 3D responses
-- `C:\LoData\LateralMotionRawFRTable.mat` (`LateralMotionRawFRTable`) for independent 2D lateral-motion responses
-- `C:\LoData\MIDTable.mat` (`MIDTable`) for unit classification, metadata, and combined-cue preference
+This selects 24 neurons. The combined sample therefore contains 82 neurons.
 
-It does not use the thin `MotionData_ByStim` table. The requested indices compare the eye-specific perspective cues from the 3D dataset with the separate 2D lateral-tuning dataset.
+## MT2D and FST2D selection criteria
 
-## Metric mapping
+Lo uses the complete 1.28 2D classifier for each target ROI:
 
-The 3D response tensor is `cue x signed coherence x repeat`. Cue 2 is the left-eye perspective condition, cue 3 is the right-eye perspective condition, coherence `+1` is toward, and coherence `-1` is away:
+```matlab
+ROI == targetROI & sig_Anova_CLR & Z_quad == 4
+```
 
-| Metric | Response |
-|---|---|
-| `T_L` | left-eye perspective, toward at coherence `+1` |
-| `T_R` | right-eye perspective, toward at coherence `+1` |
-| `A_L` | left-eye perspective, away at coherence `-1` |
-| `A_R` | right-eye perspective, away at coherence `-1` |
+This selects 80 MT2D and 66 FST2D neurons. Fourteen Lo MT2D neurons do not have the matched 7041 lateral-motion speed; they remain in the selected population with valid BODI, while PDI and its components are `NaN` and `Valid_PDI` is false.
 
-For the 2D metrics, the first letter is motion direction and the suffix is eye. Condition 8001 is left eye, 8002 is right eye, 0 degrees is rightward, and 180 degrees is leftward:
+EM uses the closest strict 2D analogue supported by `unit_table_gof`:
 
-| Metric | Response |
-|---|---|
-| `R_L` | rightward, left eye |
-| `R_R` | rightward, right eye |
-| `L_L` | leftward, left eye |
-| `L_R` | leftward, right eye |
+```matlab
+ROI == targetROI & ND == "2D" & Z3D_v_Z2D < -1.28
+```
 
-The indices are:
+This selects 49 MT2D and 47 FST2D neurons. The combined populations contain 129 MT2D and 113 FST2D neurons.
+
+## Metrics
+
+The 3D response tensor is `cue x signed coherence x repeat`. Cue 1 is combined optic flow, cue 2 is the left-eye perspective condition, cue 3 is the right-eye perspective condition, cue 4 is stereoscopic, coherence `+1` is toward, and coherence `-1` is away.
+
+For the independent 2D data, `R_L`, `R_R`, `L_L`, and `L_R` denote rightward/leftward motion shown to the left/right eye. PDI uses the matched slow 2D speed of about 4.2 deg/s.
 
 ```text
 TDI = (T_L + T_R - R_L - L_R) / (T_L + T_R + R_L + L_R)
 ADI = (A_L + A_R - L_L - R_R) / (A_L + A_R + L_L + R_R)
+
+PDI = TDI for a toward-preferring neuron
+PDI = ADI for an away-preferring neuron
+
+BODI = (Combined_FR - Stereo_FR) / (Combined_FR + Stereo_FR)
 ```
 
-A zero or nonfinite denominator produces `NaN` and a false validity flag. Means omit nonfinite trials/repeats. Firing rates use the full stimulus interval without baseline subtraction, matching the source pipelines.
+Combined-cue preference is the sign of `Combined_AI`. For BODI, `Combined_FR` and `Stereo_FR` come only from cue 1 and cue 4 at coherence `+1` for toward preference or `-1` for away preference. BODI has no 2D-tuning or speed component; “2D” and “3D” identify the neuron classification, not the stimulus used for BODI.
 
-## Speed handling
+A zero or nonfinite denominator produces `NaN` and a false validity flag. Means omit nonfinite trials or repeats.
 
-The primary one-row-per-unit result uses event code 7041, the experiment's slow (~4.2 deg/s) 2D condition. This is the appropriate speed match because the 3D signal dots moved at about 4.2 deg/s and the horizontal monocular 2D stimuli at that speed were equivalent to monocular views of the 100%-coherence stereoscopic stimulus. All 58 target units have this condition.
+## Statistical analysis and figures
 
-The faster condition (event code 7125, ~12.6 deg/s) is not pooled into the primary indices. It is analyzed separately with the same metrics, preference groups, and tests. It is available for 57 of the 58 target units; source row 362 (Jim, 2019-12-11, tetrode 2, unit 2; away-preferring) has no fast-speed condition. Separate results for every available speed are retained in the by-speed output.
+PDI and BODI are pooled across toward- and away-preferring neurons in every dataset. The final figure contains only two probability histograms: PDI and BODI. Preference is not represented by separate colors, groups, or legends.
 
-## Toward/away coloring
-
-Preference is defined from the combined-cue asymmetry index already stored in `MIDTable`: `Combined_AI > 0` is toward-preferring, `Combined_AI < 0` is away-preferring, and exactly zero is neutral. Preference only controls the plot color; it does not alter any response metric or index. The CSV/MAT outputs retain both `Combined_AI` and `CombinedCuePreference`. The summary figure overlays semi-transparent, identically binned probability histograms so the unequal-sized preference groups can be compared by distribution shape.
+Each pooled distribution is tested against an equal-sized zero reference using a two-sided Wilcoxon rank-sum test. Bonferroni correction is applied across the two metrics within each dataset.
 
 ## Run
 
@@ -63,65 +76,79 @@ From MATLAB:
 
 ```matlab
 cd('C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\PatternTuning')
-TestComputeFSTPatternTuningIndices
-RunFSTPatternTuningAnalysis
+TestBuildFSTPDIAndBODITable
+RunFSTPDIAndBODIAnalysis128
+Run2DPDIAndBODIAnalysis128
 ```
 
-Outputs are written to `outputs/`:
-
-- `FST3DPatternTuningIndices.csv`: primary matched-speed result, one row per unit
-- `FST3DPatternTuningIndices_Fast.csv`: fast-speed result, one row per unit with that condition
-- `FST3DPatternTuningIndices_BySpeed.csv`: one row per unit and available speed
-- `FST3DPatternTuningSummary.csv`: overall and per-monkey summaries
-- `FST3DPatternTuningZeroTests.csv`: toward/away one-sample tests against zero for both speeds
-- `FST3DPatternTuningIndices.mat`: all tables plus analysis configuration
-- `FST3DPatternTuningIndices.png`: matched-slow panels on the top row and corresponding fast-speed panels below, using shared axes and histogram bins
-
-The specified TDI/ADI equations require the two eye-specific perspective cues. A combined-cue response cannot be split into `T_L` and `T_R`; no unrequested combined-versus-stereo index is invented here.
-
-## Tests against zero
-
-For each speed, index, and combined-cue preference group, the runner performs a two-sided one-sample Wilcoxon signed-rank test against zero. This is the one-sample counterpart appropriate for a fixed zero null; `ranksum` instead requires two independent samples. Four tests are run within each speed (`TDI/ADI x toward/away`). The output reports raw p-values, Bonferroni adjustment within each four-test speed family, and the more conservative Bonferroni adjustment across all eight slow-plus-fast tests.
-
-## EM `unit_table_gof` analysis
-
-The independent EM implementation reads `C:\EM\PopulationAnalysis\unit_table_gof.mat` and selects the analyzed stimulation-channel units with:
+For the paper-ready Lo-versus-EM FST3D comparison, run:
 
 ```matlab
-ROI == "FST" & ND == "3D"
+TestBuildFSTDatasetComparisonStatistics
+RunFSTPDIAndBODIPaperComparison128
 ```
 
-In this table, `ND == "3D"` means that both perspective cues have `p_AI < 0.05` and `Z3D_v_Z2D > 0`. The analyzed channel is `StimElec`. Combined-cue preference is the sign of `AI(1, StimElec)`.
+The paper runner rebuilds the strict Lo (n = 58), EM (n = 24), and combined
+(n = 82) results, verifies all counts, means, medians, and Bonferroni-adjusted
+zero-test p values against the rounded Aug 12, 2026 summary, and stops on any
+failed check. It then writes `Final_128\PaperComparison` with:
 
-The 3D endpoint metrics come from `tuning_mean`: cue 2/3 and the first/last stored coherence columns for away/toward. The 2D metrics are trial means from `Raw2D_StimCh`, whose axes are direction x speed x eye x repeat. Direction indices 1/5 are 0/180 degrees, speed indices 1/2 are approximately 4.2/12.5 deg/s, and eye indices 1/2 are left/right. The EM table retains trial-level 2D responses but only mean 3D responses, so `N_R_L` through `N_L_R` are reported while the four 3D trial-count fields are `NaN`.
+- a wide companion statistics CSV containing selected and valid sample counts,
+  mean/SD/SEM/95% CI, median/IQR, EM-minus-Lo mean and median differences,
+  Hedges' g, Cliff's delta with a seeded bootstrap 95% CI, and a two-sided
+  rank-sum comparison corrected across PDI and BODI;
+- a machine-readable Aug 12 verification CSV;
+- a MAT file with source tables, configuration, bootstrap seed, and results;
+- a 600-dpi PNG plus vector PDF and SVG versions of the comparison figure.
 
-Run the EM analysis from MATLAB:
+Effect-size signs are always EM minus Lo. The figure uses both color and marker
+shape to distinguish datasets and shows every neuron, median/IQR, and mean/95% CI.
 
-```matlab
-cd('C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\PatternTuning')
-TestComputeEMFSTPatternTuningIndices
-RunEMFSTPatternTuningAnalysis
+Outputs are organized as:
+
+```text
+C:\EM\PatternTuning\Final_128\Lo
+C:\EM\PatternTuning\Final_128\EM
+C:\EM\PatternTuning\Final_128\Combined
+C:\EM\PatternTuning\Final_128\MT2D\Lo
+C:\EM\PatternTuning\Final_128\MT2D\EM
+C:\EM\PatternTuning\Final_128\MT2D\Combined
+C:\EM\PatternTuning\Final_128\FST2D\Lo
+C:\EM\PatternTuning\Final_128\FST2D\EM
+C:\EM\PatternTuning\Final_128\FST2D\Combined
 ```
 
-EM outputs are written to `outputs_em/` with the prefix `EMFST3DPatternTuning`. They include slow, fast, and by-speed CSV tables; a speed-aware summary; signed-rank tests; a MAT file; and the same two-row, three-column comparison figure used for Lo's analysis.
+Each directory contains:
 
-## Combined Lo and EM analysis
+- the neuron-level PDI/BODI CSV;
+- a grouped summary CSV;
+- a PDI/BODI rank-sum test CSV;
+- a MAT file containing the tables and analysis configuration;
+- a PNG with the pooled PDI and BODI histograms.
 
-`RunCombinedLoEMFSTPatternTuningAnalysis` merges the two datasets without changing either standalone output. For this combined analysis only, Lo's 1.28 classification is relaxed to:
+The existing concise FST3D Word summary is saved at:
 
-```matlab
-ROI == "FST" & sig_Anova_CLR & Z3D_v_Z2D > 0
+```text
+C:\EM\PatternTuning\PatternTuning_Analysis_Summary.docx
 ```
 
-The EM selection remains `ROI == "FST" & ND == "3D"`. The merged table includes `SourceDataset`, the original source row and identifiers, a unified speed rank/label, and all response metrics and indices.
+Previous TDI/ADI deliverables are retained under `C:\EM\PatternTuning\Archive\Previous_TDI_ADI_Results` for traceability and are not part of the final result set.
 
-The histogram panels pool Lo and EM units completely and retain only the toward/away color distinction. In scatter panels, color still represents toward/away preference, circles represent Jim, diamonds represent Clay, filled markers represent Lo, and open markers represent EM. Signed-rank tests are performed on the pooled preference groups.
+## FST3D population results
 
-Run from MATLAB:
+| Dataset | n | PDI mean | PDI median | PDI Bonferroni p | BODI mean | BODI median | BODI Bonferroni p |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Lo | 58 | 0.154 | 0.185 | 8.76e-08 | 0.140 | 0.127 | 1.54e-11 |
+| EM | 24 | 0.202 | 0.209 | 2.60e-07 | 0.178 | 0.191 | 4.07e-06 |
+| Combined | 82 | 0.168 | 0.197 | 1.34e-13 | 0.151 | 0.148 | 1.27e-16 |
 
-```matlab
-cd('C:\Users\zzhu329\Documents\GitHub\EM-3DMotion\PatternTuning')
-RunCombinedLoEMFSTPatternTuningAnalysis
-```
+## MT2D and FST2D population results
 
-Combined outputs are written to `outputs_combined/` with the prefix `CombinedLoEMFST3DPatternTuning`.
+| Population | Dataset | selected n | valid PDI n | PDI mean | PDI median | PDI Bonferroni p | valid BODI n | BODI mean | BODI median | BODI Bonferroni p |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| MT2D | Lo | 80 | 66 | 0.096 | 0.077 | 1.52e-08 | 80 | 0.035 | 0.017 | 7.07e-03 |
+| MT2D | EM | 49 | 49 | 0.044 | 0.039 | 3.80e-05 | 49 | 0.082 | 0.078 | 6.69e-06 |
+| MT2D | Combined | 129 | 115 | 0.074 | 0.056 | 1.33e-12 | 129 | 0.053 | 0.031 | 4.52e-07 |
+| FST2D | Lo | 66 | 66 | 0.133 | 0.124 | 3.09e-13 | 66 | 0.151 | 0.156 | 2.63e-14 |
+| FST2D | EM | 47 | 47 | 0.033 | 0.031 | 1.35e-04 | 47 | 0.082 | 0.077 | 2.54e-05 |
+| FST2D | Combined | 113 | 113 | 0.091 | 0.091 | 3.65e-16 | 113 | 0.122 | 0.132 | 5.34e-18 |

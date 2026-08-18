@@ -1,10 +1,12 @@
-function [PatternTuningTable, PatternTuningBySpeedTable, PatternTuningSummary] = ...
+function [PatternTuningTable, PatternTuningBySpeedTable, PatternTuningSummary, ...
+        BinocularOpticFlowTable, BinocularOpticFlowSummary] = ...
     ComputeFSTPatternTuningIndices(NeuroRespUnitTable, LateralMotionRawFRTable, MIDTable, options)
 %COMPUTEFSTPATTERNTUNINGINDICES Compute perspective-versus-lateral indices.
-%   The primary output has one row for each Lo-classified 3D FST
-%   unit and uses the matched slow 2D speed (event code 7041, approximately
-%   4.2 deg/s). PatternTuningBySpeedTable retains one row per unit and
-%   available 2D speed.
+%   The primary output has one row for each selected Lo neuron and uses the
+%   matched slow 2D speed (event code 7041, approximately 4.2 deg/s).
+%   PatternTuningBySpeedTable retains one row per unit and available 2D
+%   speed. TargetROI and SelectionMode select strict MT/FST 2D or 3D
+%   populations while preserving the same response mapping and formulas.
 %
 %   Response labels follow motion_direction_eye:
 %       T_L: toward, left-eye perspective cue
@@ -20,6 +22,10 @@ function [PatternTuningTable, PatternTuningBySpeedTable, PatternTuningSummary] =
 %         (T_L + T_R + R_L + L_R)
 %   ADI = (A_L + A_R - L_L - R_R) / ...
 %         (A_L + A_R + L_L + R_R)
+%   BODI = (Combined_FR - Stereo_FR) / ...
+%          (Combined_FR + Stereo_FR)
+%   Combined_FR and Stereo_FR are evaluated at coherence +1 for
+%   toward-preferring units and -1 for away-preferring units.
 
 arguments
     NeuroRespUnitTable table
@@ -27,6 +33,7 @@ arguments
     MIDTable table
     options.Matched2DSpeedCode (1, 1) double = 7041
     options.SelectionMode (1, 1) string = "lo-1.28"
+    options.TargetROI (1, 1) string = "FST"
 end
 
 constants = analysis_constants(options.Matched2DSpeedCode);
@@ -34,23 +41,37 @@ validate_input_tables(NeuroRespUnitTable, LateralMotionRawFRTable, MIDTable);
 verify_row_alignment(NeuroRespUnitTable, LateralMotionRawFRTable, MIDTable);
 
 roi = upper(strtrim(string(MIDTable.ROI)));
+targetROI = upper(strtrim(options.TargetROI));
+if ~ismember(targetROI, ["MT", "FST"])
+    error('ComputeFSTPatternTuningIndices:InvalidTargetROI', ...
+        'TargetROI must be "MT" or "FST".');
+end
 if options.SelectionMode == "lo-1.28"
-    isThreeDFST = roi == "FST" ...
+    isSelected = roi == targetROI ...
         & logical(MIDTable.sig_Anova_CLR) ...
         & MIDTable.Z_quad == 2;
+    selectedNeuroType = "3D";
+elseif options.SelectionMode == "lo-2d-1.28"
+    isSelected = roi == targetROI ...
+        & logical(MIDTable.sig_Anova_CLR) ...
+        & MIDTable.Z_quad == 4;
+    selectedNeuroType = "2D";
 elseif options.SelectionMode == "positive-score"
-    isThreeDFST = roi == "FST" ...
+    isSelected = roi == targetROI ...
         & logical(MIDTable.sig_Anova_CLR) ...
         & MIDTable.Z3D_v_Z2D > 0;
+    selectedNeuroType = "3D";
 else
     error('ComputeFSTPatternTuningIndices:UnknownSelectionMode', ...
-        'SelectionMode must be "lo-1.28" or "positive-score".');
+        ['SelectionMode must be "lo-1.28", "lo-2d-1.28", or ' ...
+        '"positive-score".']);
 end
-sourceRows = find(isThreeDFST);
+sourceRows = find(isSelected);
 
 if isempty(sourceRows)
     error('ComputeFSTPatternTuningIndices:NoSelectedUnits', ...
-        'No canonical 3D FST units were found.');
+        'No %s %s units satisfy SelectionMode %s.', ...
+        targetROI, selectedNeuroType, options.SelectionMode);
 end
 
 nUnits = numel(sourceRows);
@@ -62,6 +83,11 @@ N_T_L = zeros(nUnits, 1);
 N_T_R = zeros(nUnits, 1);
 N_A_L = zeros(nUnits, 1);
 N_A_R = zeros(nUnits, 1);
+preferredCoherence = nan(nUnits, 1);
+combinedFR = nan(nUnits, 1);
+stereoFR = nan(nUnits, 1);
+N_Combined_FR = zeros(nUnits, 1);
+N_Stereo_FR = zeros(nUnits, 1);
 speedCounts = zeros(nUnits, 1);
 
 for unitIndex = 1:nUnits
@@ -78,6 +104,23 @@ for unitIndex = 1:nUnits
     [A_R(unitIndex), N_A_R(unitIndex)] = finite_mean( ...
         response(constants.RightPerspectiveCue, constants.AwayCoherenceIndex, :));
 
+    combinedAI = MIDTable.Combined_AI(sourceRow);
+    if isfinite(combinedAI) && combinedAI > 0
+        preferredCoherence(unitIndex) = 1;
+        preferredCoherenceIndex = constants.TowardCoherenceIndex;
+    elseif isfinite(combinedAI) && combinedAI < 0
+        preferredCoherence(unitIndex) = -1;
+        preferredCoherenceIndex = constants.AwayCoherenceIndex;
+    else
+        preferredCoherenceIndex = [];
+    end
+    if ~isempty(preferredCoherenceIndex)
+        [combinedFR(unitIndex), N_Combined_FR(unitIndex)] = finite_mean( ...
+            response(constants.CombinedCue, preferredCoherenceIndex, :));
+        [stereoFR(unitIndex), N_Stereo_FR(unitIndex)] = finite_mean( ...
+            response(constants.StereoCue, preferredCoherenceIndex, :));
+    end
+
     speedCodes = normalize_numeric_vector( ...
         LateralMotionRawFRTable.SpeedCodesUsed{sourceRow});
     if isempty(speedCodes)
@@ -86,6 +129,36 @@ for unitIndex = 1:nUnits
     end
     speedCounts(unitIndex) = numel(speedCodes);
 end
+
+bodiNumerator = combinedFR - stereoFR;
+bodiDenominator = combinedFR + stereoFR;
+completeBODIComponents = all(isfinite([combinedFR, stereoFR]), 2);
+validBODI = completeBODIComponents & isfinite(bodiDenominator) ...
+    & bodiDenominator ~= 0;
+BODI = nan(nUnits, 1);
+BODI(validBODI) = bodiNumerator(validBODI) ./ bodiDenominator(validBODI);
+
+BinocularOpticFlowTable = table();
+BinocularOpticFlowTable.SourceRow = sourceRows;
+BinocularOpticFlowTable.Date = MIDTable.Date(sourceRows);
+BinocularOpticFlowTable.Monkey = string(MIDTable.Monkey(sourceRows));
+BinocularOpticFlowTable.ROI = string(MIDTable.ROI(sourceRows));
+BinocularOpticFlowTable.Tetrode = MIDTable.Tetrode(sourceRows);
+BinocularOpticFlowTable.Unit = MIDTable.Unit(sourceRows);
+BinocularOpticFlowTable.NeuroType = repmat(selectedNeuroType, nUnits, 1);
+BinocularOpticFlowTable.Z3D_v_Z2D = MIDTable.Z3D_v_Z2D(sourceRows);
+BinocularOpticFlowTable.Combined_AI = MIDTable.Combined_AI(sourceRows);
+BinocularOpticFlowTable.CombinedCuePreference = ...
+    preference_labels(BinocularOpticFlowTable.Combined_AI);
+BinocularOpticFlowTable.PreferredCoherence = preferredCoherence;
+BinocularOpticFlowTable.Combined_FR = combinedFR;
+BinocularOpticFlowTable.Stereo_FR = stereoFR;
+BinocularOpticFlowTable.N_Combined_FR = N_Combined_FR;
+BinocularOpticFlowTable.N_Stereo_FR = N_Stereo_FR;
+BinocularOpticFlowTable.BODI_Numerator = bodiNumerator;
+BinocularOpticFlowTable.BODI_Denominator = bodiDenominator;
+BinocularOpticFlowTable.BODI = BODI;
+BinocularOpticFlowTable.Valid_BODI = validBODI;
 
 nLongRows = sum(speedCounts);
 unitIndexLong = zeros(nLongRows, 1);
@@ -161,7 +234,7 @@ PatternTuningBySpeedTable.Monkey = string(MIDTable.Monkey(sourceRowLong));
 PatternTuningBySpeedTable.ROI = string(MIDTable.ROI(sourceRowLong));
 PatternTuningBySpeedTable.Tetrode = MIDTable.Tetrode(sourceRowLong);
 PatternTuningBySpeedTable.Unit = MIDTable.Unit(sourceRowLong);
-PatternTuningBySpeedTable.NeuroType = repmat("3D", nLongRows, 1);
+PatternTuningBySpeedTable.NeuroType = repmat(selectedNeuroType, nLongRows, 1);
 PatternTuningBySpeedTable.Z3D_v_Z2D = MIDTable.Z3D_v_Z2D(sourceRowLong);
 PatternTuningBySpeedTable.Combined_AI = MIDTable.Combined_AI(sourceRowLong);
 PatternTuningBySpeedTable.CombinedCuePreference = ...
@@ -201,22 +274,61 @@ PatternTuningBySpeedTable.Complete_AllEightMetrics = ...
 primaryMask = PatternTuningBySpeedTable.IsMatchedSlowSpeed;
 primaryRows = PatternTuningBySpeedTable(primaryMask, :);
 [foundPrimary, primaryLocation] = ismember(sourceRows, primaryRows.SourceRow);
-if ~all(foundPrimary)
+if any(~foundPrimary)
     missingRows = sourceRows(~foundPrimary);
-    error('ComputeFSTPatternTuningIndices:MissingMatchedSpeed', ...
-        'Matched 2D speed code %g is missing for source row(s): %s', ...
+    warning('ComputeFSTPatternTuningIndices:MissingMatchedSpeed', ...
+        ['Matched 2D speed code %g is missing for source row(s): %s. ' ...
+        'Their matched-speed lateral responses and PDI components are NaN.'], ...
         constants.Matched2DSpeedCode, mat2str(missingRows(:)'));
+    missingPrimaryRows = PatternTuningBySpeedTable([], :);
+    for missingIndex = 1:numel(missingRows)
+        sourceRow = missingRows(missingIndex);
+        templateIndex = find( ...
+            PatternTuningBySpeedTable.SourceRow == sourceRow, 1, 'first');
+        placeholder = PatternTuningBySpeedTable(templateIndex, :);
+        placeholder.SpeedRank_2D = nan;
+        placeholder.SpeedCode_2D = constants.Matched2DSpeedCode;
+        placeholder.SpeedLabel_2D = speed_labels(constants.Matched2DSpeedCode);
+        placeholder.IsMatchedSlowSpeed = true;
+        placeholder.R_L = nan;
+        placeholder.R_R = nan;
+        placeholder.L_L = nan;
+        placeholder.L_R = nan;
+        placeholder.N_R_L = 0;
+        placeholder.N_R_R = 0;
+        placeholder.N_L_L = 0;
+        placeholder.N_L_R = 0;
+        placeholder.TDI_Numerator = nan;
+        placeholder.TDI_Denominator = nan;
+        placeholder.TDI = nan;
+        placeholder.ADI_Numerator = nan;
+        placeholder.ADI_Denominator = nan;
+        placeholder.ADI = nan;
+        placeholder.Valid_TDI = false;
+        placeholder.Valid_ADI = false;
+        placeholder.Complete_AllEightMetrics = false;
+        missingPrimaryRows = [missingPrimaryRows; placeholder]; %#ok<AGROW>
+    end
+    primaryRows = [primaryRows; missingPrimaryRows];
+    [foundPrimary, primaryLocation] = ismember( ...
+        sourceRows, primaryRows.SourceRow);
 end
-if height(primaryRows) ~= nUnits || numel(unique(primaryRows.SourceRow)) ~= nUnits
+if ~all(foundPrimary) || height(primaryRows) ~= nUnits ...
+        || numel(unique(primaryRows.SourceRow)) ~= nUnits
     error('ComputeFSTPatternTuningIndices:DuplicateMatchedSpeed', ...
         'Expected exactly one matched-speed row per selected unit.');
 end
 PatternTuningTable = primaryRows(primaryLocation, :);
 
 if options.SelectionMode == "positive-score"
-    selectionDescription = 'Lo FST units with significant tuning and Z3D_v_Z2D > 0';
+    selectionDescription = sprintf( ...
+        'Lo %s units with significant tuning and Z3D_v_Z2D > 0', targetROI);
+elseif options.SelectionMode == "lo-2d-1.28"
+    selectionDescription = sprintf( ...
+        'Lo-criterion %s 2D units (sig_Anova_CLR and Z_quad == 4)', targetROI);
 else
-    selectionDescription = 'Lo-criterion 3D FST units';
+    selectionDescription = sprintf( ...
+        'Lo-criterion %s 3D units (sig_Anova_CLR and Z_quad == 2)', targetROI);
 end
 PatternTuningTable.Properties.Description = sprintf( ...
     '%s; primary perspective-versus-lateral pattern-tuning indices.', ...
@@ -224,18 +336,25 @@ PatternTuningTable.Properties.Description = sprintf( ...
 PatternTuningBySpeedTable.Properties.Description = sprintf( ...
     '%s; perspective-versus-lateral indices at each available 2D speed.', ...
     selectionDescription);
+BinocularOpticFlowTable.Properties.Description = sprintf( ...
+    ['%s; one 3D-stimulus BODI row per neuron using combined cue 1 and ' ...
+    'stereoscopic cue 4.'], selectionDescription);
 
 check_index_bounds(PatternTuningBySpeedTable.TDI, 'TDI');
 check_index_bounds(PatternTuningBySpeedTable.ADI, 'ADI');
+check_index_bounds(BinocularOpticFlowTable.BODI, 'BODI');
 PatternTuningSummary = build_summary(PatternTuningTable);
+BinocularOpticFlowSummary = build_bodi_summary(BinocularOpticFlowTable);
 end
 
 function constants = analysis_constants(matched2DSpeedCode)
 constants.Coherence = [-22, -14, -10, -8, -4, -2, 0, 2, 4, 8, 10, 14, 22] ./ 22;
 constants.TowardCoherenceIndex = find(constants.Coherence == 1, 1, 'first');
 constants.AwayCoherenceIndex = find(constants.Coherence == -1, 1, 'first');
+constants.CombinedCue = 1;
 constants.LeftPerspectiveCue = 2;
 constants.RightPerspectiveCue = 3;
+constants.StereoCue = 4;
 constants.LeftEyeCondition = 8001;
 constants.RightEyeCondition = 8002;
 constants.RightwardDegrees = 0;
@@ -303,7 +422,7 @@ end
 
 function validate_3d_response(response, sourceRow, constants)
 if ~isnumeric(response) ...
-        || size(response, 1) < constants.RightPerspectiveCue ...
+        || size(response, 1) < constants.StereoCue ...
         || size(response, 2) < max(constants.TowardCoherenceIndex, constants.AwayCoherenceIndex)
     error('ComputeFSTPatternTuningIndices:Invalid3DResponse', ...
         '3D response at source row %d has invalid size %s.', ...
@@ -440,4 +559,45 @@ summary = table(Group, N_Selected, N_Complete, N_TowardPreferred, ...
     N_AwayPreferred, N_NeutralOrUndefined, N_Valid_TDI, ...
     TDI_Mean, TDI_Median, TDI_SD, N_TDI_Positive, N_Valid_ADI, ...
     ADI_Mean, ADI_Median, ADI_SD, N_ADI_Positive);
+end
+
+function summary = build_bodi_summary(T)
+monkeys = unique(string(T.Monkey), 'stable');
+groupNames = ["All"; monkeys(:)];
+nGroups = numel(groupNames);
+Group = groupNames;
+N_Selected = zeros(nGroups, 1);
+N_TowardPreferred = zeros(nGroups, 1);
+N_AwayPreferred = zeros(nGroups, 1);
+N_NeutralOrUndefined = zeros(nGroups, 1);
+N_Valid_BODI = zeros(nGroups, 1);
+BODI_Mean = nan(nGroups, 1);
+BODI_Median = nan(nGroups, 1);
+BODI_SD = nan(nGroups, 1);
+N_BODI_Positive = zeros(nGroups, 1);
+
+for groupIndex = 1:nGroups
+    if groupNames(groupIndex) == "All"
+        mask = true(height(T), 1);
+    else
+        mask = string(T.Monkey) == groupNames(groupIndex);
+    end
+    values = T.BODI(mask & T.Valid_BODI);
+    N_Selected(groupIndex) = nnz(mask);
+    N_TowardPreferred(groupIndex) = nnz(mask & T.CombinedCuePreference == "Toward");
+    N_AwayPreferred(groupIndex) = nnz(mask & T.CombinedCuePreference == "Away");
+    N_NeutralOrUndefined(groupIndex) = nnz(mask ...
+        & ~ismember(T.CombinedCuePreference, ["Toward", "Away"]));
+    N_Valid_BODI(groupIndex) = numel(values);
+    if ~isempty(values)
+        BODI_Mean(groupIndex) = mean(values);
+        BODI_Median(groupIndex) = median(values);
+        BODI_SD(groupIndex) = std(values);
+        N_BODI_Positive(groupIndex) = nnz(values > 0);
+    end
+end
+
+summary = table(Group, N_Selected, N_TowardPreferred, N_AwayPreferred, ...
+    N_NeutralOrUndefined, N_Valid_BODI, BODI_Mean, BODI_Median, ...
+    BODI_SD, N_BODI_Positive);
 end

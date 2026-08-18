@@ -1,10 +1,15 @@
 function [CombinedPatternTuningBySpeedTable, CombinedPatternTuningSummary] = ...
-    MergeFSTPatternTuningDatasets(loBySpeed, emBySpeed)
+    MergeFSTPatternTuningDatasets(loBySpeed, emBySpeed, options)
 %MERGEFSTPATTERNTUNINGDATASETS Standardize and merge Lo and EM index tables.
 
 arguments
     loBySpeed table
     emBySpeed table
+    options.LoSelectionCriterion (1, 1) string = ...
+        "ROI==FST & sig_Anova_CLR & Z3D_v_Z2D>0"
+    options.EMSelectionCriterion (1, 1) string = "ROI==FST & ND==3D"
+    options.Description (1, 1) string = ...
+        "Merged Lo and EM FST pattern-tuning indices"
 end
 
 required = {'SourceRow', 'Date', 'Monkey', 'ROI', 'NeuroType', ...
@@ -17,15 +22,16 @@ required = {'SourceRow', 'Date', 'Monkey', 'ROI', 'NeuroType', ...
 validate_variables(loBySpeed, required, 'Lo');
 validate_variables(emBySpeed, required, 'EM');
 
-lo = standardize_source_table(loBySpeed, "Lo");
-em = standardize_source_table(emBySpeed, "EM");
+lo = standardize_source_table( ...
+    loBySpeed, "Lo", options.LoSelectionCriterion);
+em = standardize_source_table( ...
+    emBySpeed, "EM", options.EMSelectionCriterion);
 CombinedPatternTuningBySpeedTable = [lo; em];
 CombinedPatternTuningBySpeedTable = sortrows( ...
     CombinedPatternTuningBySpeedTable, ...
     {'SpeedRank_2D', 'SourceDataset', 'Monkey', 'Date', 'SourceRow'});
 CombinedPatternTuningBySpeedTable.Properties.Description = ...
-    ['Merged Lo and EM FST pattern-tuning indices. Lo selection is ' ...
-    'sig_Anova_CLR with Z3D_v_Z2D > 0; EM selection is ND == 3D.'];
+    char(options.Description);
 
 CombinedPatternTuningSummary = build_summary(CombinedPatternTuningBySpeedTable);
 end
@@ -38,7 +44,7 @@ if ~isempty(missing)
 end
 end
 
-function out = standardize_source_table(T, sourceDataset)
+function out = standardize_source_table(T, sourceDataset, selectionCriterion)
 nRows = height(T);
 out = table();
 out.SourceDataset = repmat(sourceDataset, nRows, 1);
@@ -53,7 +59,7 @@ out.Unit = optional_numeric(T, 'Unit', nRows);
 out.StimElec = optional_numeric(T, 'StimElec', nRows);
 out.OriginalRecIdx = optional_numeric(T, 'OriginalRecIdx', nRows);
 out.NeuroType = string(T.NeuroType);
-out.SelectionCriterion = selection_criterion(sourceDataset, nRows);
+out.SelectionCriterion = repmat(selectionCriterion, nRows, 1);
 out.Z3D_v_Z2D = double(T.Z3D_v_Z2D);
 out.Combined_AI = double(T.Combined_AI);
 out.CombinedCuePreference = string(T.CombinedCuePreference);
@@ -96,15 +102,6 @@ else
     values = nan(height(T), 1);
 end
 values = reshape(values, [], 1);
-end
-
-function criterion = selection_criterion(sourceDataset, nRows)
-if sourceDataset == "Lo"
-    text = "ROI==FST & sig_Anova_CLR & Z3D_v_Z2D>0";
-else
-    text = "ROI==FST & ND==3D";
-end
-criterion = repmat(text, nRows, 1);
 end
 
 function labels = combined_speed_labels(speedRanks)

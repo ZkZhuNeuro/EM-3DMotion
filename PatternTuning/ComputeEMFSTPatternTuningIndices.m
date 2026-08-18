@@ -1,8 +1,10 @@
-function [PatternTuningTable, PatternTuningBySpeedTable, PatternTuningSummary] = ...
-    ComputeEMFSTPatternTuningIndices(unit_table_gof)
+function [PatternTuningTable, PatternTuningBySpeedTable, PatternTuningSummary, ...
+        BinocularOpticFlowTable, BinocularOpticFlowSummary] = ...
+    ComputeEMFSTPatternTuningIndices(unit_table_gof, options)
 %COMPUTEEMFSTPATTERNTUNINGINDICES Compute EM perspective-versus-lateral indices.
-%   Selects EM recording rows classified as FST and ND == "3D". The
-%   stimulation channel is treated as the analyzed unit for each row.
+%   Selects EM rows by TargetROI, NeuroType, and optional strict lower or
+%   upper Z3D_v_Z2D bounds. The stimulation channel is treated as the
+%   analyzed unit for each row.
 %
 %   unit_table_gof.tuning_mean is cue x coherence x channel. The first and
 %   last coherence columns are away (-1) and toward (+1), respectively.
@@ -14,9 +16,17 @@ function [PatternTuningTable, PatternTuningBySpeedTable, PatternTuningSummary] =
 %         (T_L + T_R + R_L + L_R)
 %   ADI = (A_L + A_R - L_L - R_R) / ...
 %         (A_L + A_R + L_L + R_R)
+%   BODI = (Combined_FR - Stereo_FR) / ...
+%          (Combined_FR + Stereo_FR)
+%   Combined_FR and Stereo_FR use coherence +1 for toward-preferring units
+%   and -1 for away-preferring units.
 
 arguments
     unit_table_gof table
+    options.Z3DMinus2DThreshold (1, 1) double = -Inf
+    options.Z3DMinus2DMaximum (1, 1) double = Inf
+    options.TargetROI (1, 1) string = "FST"
+    options.NeuroType (1, 1) string = "3D"
 end
 
 validate_input_table(unit_table_gof);
@@ -24,10 +34,34 @@ constants = analysis_constants();
 
 roi = upper(strtrim(string(unit_table_gof.ROI)));
 neuroType = upper(strtrim(string(unit_table_gof.ND)));
-sourceRows = find(roi == "FST" & neuroType == "3D");
+targetROI = upper(strtrim(options.TargetROI));
+targetNeuroType = upper(strtrim(options.NeuroType));
+if ~ismember(targetROI, ["MT", "FST"])
+    error('ComputeEMFSTPatternTuningIndices:InvalidTargetROI', ...
+        'TargetROI must be "MT" or "FST".');
+end
+if ~ismember(targetNeuroType, ["2D", "3D"])
+    error('ComputeEMFSTPatternTuningIndices:InvalidNeuroType', ...
+        'NeuroType must be "2D" or "3D".');
+end
+if options.Z3DMinus2DThreshold >= options.Z3DMinus2DMaximum
+    error('ComputeEMFSTPatternTuningIndices:InvalidZBounds', ...
+        'Z3DMinus2DThreshold must be less than Z3DMinus2DMaximum.');
+end
+
+sourceRows = find(roi == targetROI & neuroType == targetNeuroType);
+sourceZScores = nan(size(sourceRows));
+for rowIndex = 1:numel(sourceRows)
+    sourceRow = sourceRows(rowIndex);
+    sourceZScores(rowIndex) = scalar_cell_value( ...
+        unit_table_gof.Z3D_v_Z2D{sourceRow}, 'Z3D_v_Z2D', sourceRow);
+end
+sourceRows = sourceRows(sourceZScores > options.Z3DMinus2DThreshold ...
+    & sourceZScores < options.Z3DMinus2DMaximum);
 if isempty(sourceRows)
     error('ComputeEMFSTPatternTuningIndices:NoSelectedUnits', ...
-        'No EM rows satisfy ROI == FST and ND == 3D.');
+        ['No EM rows satisfy ROI == %s, ND == %s, and the requested ' ...
+        'Z3D_v_Z2D bounds.'], targetROI, targetNeuroType);
 end
 
 nUnits = numel(sourceRows);
@@ -46,6 +80,9 @@ combinedAI_unit = nan(nUnits, 1);
 z3DMinus2D_unit = nan(nUnits, 1);
 pMonoL_unit = nan(nUnits, 1);
 pMonoR_unit = nan(nUnits, 1);
+preferredCoherence_unit = nan(nUnits, 1);
+combinedFR_unit = nan(nUnits, 1);
+stereoFR_unit = nan(nUnits, 1);
 
 R_L = nan(nLongRows, 1);
 R_R = nan(nLongRows, 1);
@@ -70,6 +107,21 @@ for unitIndex = 1:nUnits
 
     ai = unit_table_gof.AI{sourceRow};
     combinedAI_unit(unitIndex) = ai(constants.CombinedCue, channel);
+    if isfinite(combinedAI_unit(unitIndex)) && combinedAI_unit(unitIndex) > 0
+        preferredCoherence_unit(unitIndex) = 1;
+        preferredCoherenceIndex = size(tuning3D, 2);
+    elseif isfinite(combinedAI_unit(unitIndex)) && combinedAI_unit(unitIndex) < 0
+        preferredCoherence_unit(unitIndex) = -1;
+        preferredCoherenceIndex = 1;
+    else
+        preferredCoherenceIndex = [];
+    end
+    if ~isempty(preferredCoherenceIndex)
+        combinedFR_unit(unitIndex) = tuning3D( ...
+            constants.CombinedCue, preferredCoherenceIndex, channel);
+        stereoFR_unit(unitIndex) = tuning3D( ...
+            constants.StereoCue, preferredCoherenceIndex, channel);
+    end
     z3DMinus2D_unit(unitIndex) = scalar_cell_value( ...
         unit_table_gof.Z3D_v_Z2D{sourceRow}, 'Z3D_v_Z2D', sourceRow);
     pValues = unit_table_gof.p_AI{sourceRow};
@@ -92,6 +144,39 @@ for unitIndex = 1:nUnits
             constants.RightEyeCondition, :));
     end
 end
+
+bodiNumerator = combinedFR_unit - stereoFR_unit;
+bodiDenominator = combinedFR_unit + stereoFR_unit;
+completeBODIComponents = all(isfinite([combinedFR_unit, stereoFR_unit]), 2);
+validBODI = completeBODIComponents & isfinite(bodiDenominator) ...
+    & bodiDenominator ~= 0;
+BODI = nan(nUnits, 1);
+BODI(validBODI) = bodiNumerator(validBODI) ./ bodiDenominator(validBODI);
+
+BinocularOpticFlowTable = table();
+BinocularOpticFlowTable.SourceRow = sourceRows;
+BinocularOpticFlowTable.OriginalRecIdx = optional_numeric_column( ...
+    unit_table_gof, 'OriginalRecIdx', sourceRows);
+BinocularOpticFlowTable.Date = unit_table_gof.Date(sourceRows);
+BinocularOpticFlowTable.Monkey = string(unit_table_gof.Monkey(sourceRows));
+BinocularOpticFlowTable.ROI = string(unit_table_gof.ROI(sourceRows));
+BinocularOpticFlowTable.StimElec = unit_table_gof.StimElec(sourceRows);
+BinocularOpticFlowTable.NeuroType = repmat(targetNeuroType, nUnits, 1);
+BinocularOpticFlowTable.Z3D_v_Z2D = z3DMinus2D_unit;
+BinocularOpticFlowTable.P_MonoL = pMonoL_unit;
+BinocularOpticFlowTable.P_MonoR = pMonoR_unit;
+BinocularOpticFlowTable.Combined_AI = combinedAI_unit;
+BinocularOpticFlowTable.CombinedCuePreference = ...
+    preference_labels(BinocularOpticFlowTable.Combined_AI);
+BinocularOpticFlowTable.PreferredCoherence = preferredCoherence_unit;
+BinocularOpticFlowTable.Combined_FR = combinedFR_unit;
+BinocularOpticFlowTable.Stereo_FR = stereoFR_unit;
+BinocularOpticFlowTable.N_Combined_FR = nan(nUnits, 1);
+BinocularOpticFlowTable.N_Stereo_FR = nan(nUnits, 1);
+BinocularOpticFlowTable.BODI_Numerator = bodiNumerator;
+BinocularOpticFlowTable.BODI_Denominator = bodiDenominator;
+BinocularOpticFlowTable.BODI = BODI;
+BinocularOpticFlowTable.Valid_BODI = validBODI;
 
 T_L = T_L_unit(unitIndexLong);
 T_R = T_R_unit(unitIndexLong);
@@ -120,7 +205,7 @@ PatternTuningBySpeedTable.Date = unit_table_gof.Date(sourceRowLong);
 PatternTuningBySpeedTable.Monkey = string(unit_table_gof.Monkey(sourceRowLong));
 PatternTuningBySpeedTable.ROI = string(unit_table_gof.ROI(sourceRowLong));
 PatternTuningBySpeedTable.StimElec = unit_table_gof.StimElec(sourceRowLong);
-PatternTuningBySpeedTable.NeuroType = repmat("3D", nLongRows, 1);
+PatternTuningBySpeedTable.NeuroType = repmat(targetNeuroType, nLongRows, 1);
 PatternTuningBySpeedTable.Z3D_v_Z2D = z3DMinus2D_unit(unitIndexLong);
 PatternTuningBySpeedTable.P_MonoL = pMonoL_unit(unitIndexLong);
 PatternTuningBySpeedTable.P_MonoR = pMonoR_unit(unitIndexLong);
@@ -166,20 +251,44 @@ if height(PatternTuningTable) ~= nUnits
         'Expected exactly one slow-speed row per selected EM unit.');
 end
 
-PatternTuningTable.Properties.Description = ...
-    'EM unit_table_gof FST/3D rows; primary matched slow-speed indices.';
-PatternTuningBySpeedTable.Properties.Description = ...
-    'EM unit_table_gof FST/3D rows; indices at both stored 2D speeds.';
+if isfinite(options.Z3DMinus2DThreshold) ...
+        && isfinite(options.Z3DMinus2DMaximum)
+    selectionText = sprintf( ...
+        'EM unit_table_gof %s/%s rows with %g < Z3D_v_Z2D < %g', ...
+        targetROI, targetNeuroType, options.Z3DMinus2DThreshold, ...
+        options.Z3DMinus2DMaximum);
+elseif isfinite(options.Z3DMinus2DThreshold)
+    selectionText = sprintf( ...
+        'EM unit_table_gof %s/%s rows with Z3D_v_Z2D > %g', ...
+        targetROI, targetNeuroType, options.Z3DMinus2DThreshold);
+elseif isfinite(options.Z3DMinus2DMaximum)
+    selectionText = sprintf( ...
+        'EM unit_table_gof %s/%s rows with Z3D_v_Z2D < %g', ...
+        targetROI, targetNeuroType, options.Z3DMinus2DMaximum);
+else
+    selectionText = sprintf( ...
+        'EM unit_table_gof %s/%s rows', targetROI, targetNeuroType);
+end
+PatternTuningTable.Properties.Description = sprintf( ...
+    '%s; primary matched slow-speed indices.', selectionText);
+PatternTuningBySpeedTable.Properties.Description = sprintf( ...
+    '%s; indices at both stored 2D speeds.', selectionText);
+BinocularOpticFlowTable.Properties.Description = sprintf( ...
+    ['%s; one 3D-stimulus BODI row per neuron using combined cue 1 and ' ...
+    'stereoscopic cue 4.'], selectionText);
 PatternTuningSummary = build_summary(PatternTuningBySpeedTable);
+BinocularOpticFlowSummary = build_bodi_summary(BinocularOpticFlowTable);
 
 check_index_bounds(PatternTuningBySpeedTable.TDI, 'TDI');
 check_index_bounds(PatternTuningBySpeedTable.ADI, 'ADI');
+check_index_bounds(BinocularOpticFlowTable.BODI, 'BODI');
 end
 
 function constants = analysis_constants
 constants.CombinedCue = 1;
 constants.LeftPerspectiveCue = 2;
 constants.RightPerspectiveCue = 3;
+constants.StereoCue = 4;
 constants.RightwardDirectionIndex = 1;
 constants.LeftwardDirectionIndex = 5;
 constants.LeftEyeCondition = 1;
@@ -202,7 +311,7 @@ if ~isfinite(channel) || channel < 1 || channel ~= round(channel)
     error('ComputeEMFSTPatternTuningIndices:InvalidChannel', ...
         'Source row %d has invalid StimElec.', sourceRow);
 end
-if ~isnumeric(tuning3D) || size(tuning3D, 1) < constants.RightPerspectiveCue ...
+if ~isnumeric(tuning3D) || size(tuning3D, 1) < constants.StereoCue ...
         || size(tuning3D, 2) < 2 || size(tuning3D, 3) < channel
     error('ComputeEMFSTPatternTuningIndices:Invalid3DTuning', ...
         'Source row %d has invalid tuning_mean size %s.', ...
@@ -326,4 +435,42 @@ summary = table(SpeedRank_2D, SpeedLabel_2D, Group, N_Selected, ...
     N_Complete, N_TowardPreferred, N_AwayPreferred, ...
     N_NeutralOrUndefined, N_Valid_TDI, TDI_Mean, TDI_Median, TDI_SD, ...
     N_Valid_ADI, ADI_Mean, ADI_Median, ADI_SD);
+end
+
+function summary = build_bodi_summary(T)
+monkeys = unique(string(T.Monkey), 'stable');
+groups = ["All"; monkeys(:)];
+nRows = numel(groups);
+Group = groups;
+N_Selected = zeros(nRows, 1);
+N_TowardPreferred = zeros(nRows, 1);
+N_AwayPreferred = zeros(nRows, 1);
+N_NeutralOrUndefined = zeros(nRows, 1);
+N_Valid_BODI = zeros(nRows, 1);
+BODI_Mean = nan(nRows, 1);
+BODI_Median = nan(nRows, 1);
+BODI_SD = nan(nRows, 1);
+
+for rowIndex = 1:nRows
+    if groups(rowIndex) == "All"
+        mask = true(height(T), 1);
+    else
+        mask = string(T.Monkey) == groups(rowIndex);
+    end
+    values = T.BODI(mask & T.Valid_BODI);
+    N_Selected(rowIndex) = nnz(mask);
+    N_TowardPreferred(rowIndex) = nnz(mask & T.CombinedCuePreference == "Toward");
+    N_AwayPreferred(rowIndex) = nnz(mask & T.CombinedCuePreference == "Away");
+    N_NeutralOrUndefined(rowIndex) = nnz(mask ...
+        & ~ismember(T.CombinedCuePreference, ["Toward", "Away"]));
+    N_Valid_BODI(rowIndex) = numel(values);
+    if ~isempty(values)
+        BODI_Mean(rowIndex) = mean(values);
+        BODI_Median(rowIndex) = median(values);
+        BODI_SD(rowIndex) = std(values);
+    end
+end
+
+summary = table(Group, N_Selected, N_TowardPreferred, N_AwayPreferred, ...
+    N_NeutralOrUndefined, N_Valid_BODI, BODI_Mean, BODI_Median, BODI_SD);
 end

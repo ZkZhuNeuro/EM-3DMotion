@@ -3,7 +3,7 @@ function combined_manifest = CombineSelectedSessionPlots( ...
 % Combine tuning/behavior and recording-location plots for selected sessions.
 %
 % Sessions are selected from PlotSessionBiasVsSlopeChange using:
-%   CombinedSlopeChange < slope_threshold
+%   CombinedSlopeChange < slope_threshold (sigmoid GLM slope, N - S)
 %   AbsMeanBiasChange < bias_threshold
 %   MaxAbsBiasChange <= bias_threshold
 %
@@ -24,7 +24,7 @@ if nargin < 4 || isempty(location_folder)
 end
 if nargin < 5 || isempty(output_folder)
     output_folder = fullfile(fileparts(mfilename('fullpath')), ...
-        'CombinedSessionPlots_CombinedSlope_MaxCueBias');
+        'CombinedSessionPlots_SigmoidSlope_MaxCueBias');
 end
 
 if ~isfolder(tuning_folder)

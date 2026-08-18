@@ -6,13 +6,22 @@ colorsteps = [0 0 0;...
     0 100 255;...
     0 255 100]./255;
 CoherenceArray_no0 = [-22 -14 -10 -8 -4 -2 2 4 8 10 14 22]./22;
+CoherenceArray_with0 = [-22 -14 -10 -8 -4 -2 0 2 4 8 10 14 22]./22;
 CoherenceArray_8 = [-22 -14 -10 -8 8 10 14 22]./22;
 
 tempCh = squeeze(Neuro.Means(:,:,elec));
 tempChErr = squeeze(Neuro.SEM(:,:,elec));
-validCols = Neuro.Trials.NumTrials(1,:)>0;
+validCols = any(Neuro.Trials.NumTrials > 0, 1);
 
-if size(tempCh,2) == 12
+if isfield(Neuro, 'CoherenceArray') && ...
+        numel(Neuro.CoherenceArray) == size(tempCh, 2)
+    CoherenceArray = Neuro.CoherenceArray;
+elseif isfield(Neuro, 'Coherence') && ...
+        numel(Neuro.Coherence) == size(tempCh, 2)
+    CoherenceArray = Neuro.Coherence;
+elseif size(tempCh,2) == 13
+    CoherenceArray = CoherenceArray_with0;
+elseif size(tempCh,2) == 12
     CoherenceArray = CoherenceArray_no0;
 elseif size(tempCh,2) == 8
     CoherenceArray = CoherenceArray_8;
