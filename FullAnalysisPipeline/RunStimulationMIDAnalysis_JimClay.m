@@ -498,17 +498,8 @@ end
 end
 
 function tuningZ = zScoreTuning(tuningMean)
-tuningZ = nan(size(tuningMean));
-for channel = 1:size(tuningMean, 3)
-    for cond = 1:size(tuningMean, 1)
-        tuning = squeeze(tuningMean(cond, :, channel));
-        meanTuning = mean(tuning, 'omitnan');
-        stdTuning = std(tuning, [], 'omitnan');
-        if stdTuning > 0
-            tuningZ(cond, :, channel) = (tuning - meanTuning) ./ stdTuning;
-        end
-    end
-end
+% Preserve differences among cues by using one center and scale per channel.
+tuningZ = ZScoreTuningWithinChannel(tuningMean);
 end
 
 function generateSessionSummaryPlot(MIDTable, rec, AI, CI, R, Eye, delta_bias, Neuro, BehaviorData, colorsteps, ChannelMap, Distance)

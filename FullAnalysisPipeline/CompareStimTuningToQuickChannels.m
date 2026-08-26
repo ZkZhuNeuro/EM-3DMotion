@@ -8,12 +8,12 @@ function [Comparison, Figures] = CompareStimTuningToQuickChannels( ...
 % channel's previously saved 3DMotionQuick tuning in unit_table_gof.
 %
 % Both recordings are first reduced to the same cue/coherence grid. Each
-% cue is then z-scored independently across coherence with the sample
-% standard deviation (N-1), matching unit_table_gof.tuning_z. The primary
-% score is the unweighted sum of squared errors (SSE) across every cell in
-% the fixed common grid. A channel is rankable only when all cells are
-% finite; this prevents missing cells from producing an artificially small
-% SSE.
+% channel is then z-scored once across its complete cue-by-coherence matrix
+% with the sample standard deviation (N-1). This preserves relative firing-
+% rate offsets among cues. The primary score is the unweighted sum of squared
+% errors (SSE) across every cell in the fixed common grid. A channel is
+% rankable only when all cells are finite; this prevents missing cells from
+% producing an artificially small SSE.
 %
 % Required inputs:
 %   stimTuningFile  - MAT file produced by Extract3DMotionStimTuning
@@ -137,8 +137,8 @@ end
 stimMean = reshape(stimMeanAll( ...
     :, stimColumn, stimulationChannel, options.Unit), ...
     [conditionCount numel(stimColumn)]);
-quickZ = zScoreEachCue(quickMean);
-stimZ = zScoreEachCue(stimMean);
+quickZ = ZScoreTuningWithinChannel(quickMean);
+stimZ = ZScoreTuningWithinChannel(stimMean);
 
 quickStoredZ = [];
 if ismember('tuning_z', unitTable.Properties.VariableNames)
@@ -234,7 +234,12 @@ Comparison.StimulationProbePosition = stimProbePosition;
 Comparison.Unit = options.Unit;
 Comparison.StimGroup = stimGroupName;
 Comparison.ZScoreConvention = ...
-    "Within each cue across the common coherence means; sample SD (N-1)";
+    "Once per channel across all common cue-by-coherence means; sample SD (N-1)";
+Comparison.QuickZSource = ...
+    "Recomputed from tuning_mean; saved tuning_z is not used for scoring";
+Comparison.StoredQuickZAvailable = ~isempty(quickStoredZ);
+Comparison.StoredQuickZAudit = ...
+    "StoredZMaxAbsDifference is diagnostic only; legacy tuning_z may be cue-wise";
 Comparison.SSEConvention = ...
     "Unweighted sum across the complete fixed cue-by-coherence grid";
 Comparison.ConditionNames = conditionNames;
@@ -456,27 +461,6 @@ if size(means, 2) ~= numel(coherence)
     error('StimQuickComparison:StimCoherenceSizeMismatch', ...
         'Stim Means has %d columns but its coherence axis has %d values.', ...
         size(means, 2), numel(coherence));
-end
-end
-
-
-function zValues = zScoreEachCue(meanValues)
-zValues = nan(size(meanValues));
-channelCount = size(meanValues, 3);
-for channel = 1:channelCount
-    for cue = 1:size(meanValues, 1)
-        values = reshape(meanValues(cue, :, channel), 1, []);
-        finiteMask = isfinite(values);
-        if nnz(finiteMask) < 2
-            continue
-        end
-        center = mean(values(finiteMask));
-        scale = std(values(finiteMask), 0);
-        if isfinite(scale) && scale > 0
-            zValues(cue, finiteMask, channel) = ...
-                (values(finiteMask) - center) ./ scale;
-        end
-    end
 end
 end
 

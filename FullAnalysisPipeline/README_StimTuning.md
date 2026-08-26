@@ -31,6 +31,15 @@ contains the lean trial-by-channel-by-unit response matrix in the same row order
 as `TrialSummary`, so time-within-recording drift can be examined without
 retaining the very large raw `TrialInfo` structure.
 
+By default, tuning means and SEMs exclude trial observations with an absolute
+modified Z-score above 3.5. Detection is performed separately for each Stim
+status x cue x coherence x channel x unit cell using its median and MAD, and
+requires at least eight finite trials. Zero-MAD and smaller cells are left
+unchanged. `Neuro.TrialFiringRate` always retains the original values;
+`Neuro.FiringRateOutlierMask` records the excluded observations. Nominal trial
+counts remain in `Trials.NumTrials`, while channel-specific post-filter counts
+are in `Trials.ValidNumTrials`.
+
 Zero-coherence trials are preserved separately under `Neuro.WithZero`; they
 are deliberately absent from the top-level arrays so existing 12-column
 consumers cannot silently shift the positive-coherence indices. Direct
@@ -73,11 +82,13 @@ four cues by these eight coherence values:
 [-22 -14 -10 -8 8 10 14 22] / 22
 ```
 
-Each cue is z-scored independently across those eight mean firing rates with
-the sample standard deviation. This exactly matches the convention used by
-`unit_table_gof.tuning_z`. The channel score is the unweighted sum of squared
-differences across all 32 cells. A channel is not ranked if any cell is
-missing, so missing data cannot lower its SSE.
+Each channel is z-scored once across all 32 shared cue-by-coherence mean firing
+rates using the sample standard deviation. This preserves relative firing-rate
+offsets among cues. Quick Z-scores are recomputed from `tuning_mean`; the saved
+legacy `unit_table_gof.tuning_z` is not used because it was standardized cue by
+cue. The channel score is the unweighted sum of squared differences across all
+32 cells. A channel is not ranked if any cell is missing, so missing data
+cannot lower its SSE.
 
 Run the tested example with:
 
@@ -87,7 +98,8 @@ comparison = RunExample_CompareStimTuningToQuick_20240416();
 
 It finds the table row from monkey and recording date rather than relying on a
 fixed row number. Outputs under
-`C:\EM\FullAnalysisPipeline\outputs\StimVsQuick_20240416` include:
+`C:\EM\FullAnalysisPipeline\outputs\StimVsQuick_20240416_WholeChannelZScore`
+include:
 
 - the complete comparison MAT;
 - a channel ranking CSV and a long cell-by-cell audit CSV;

@@ -1,7 +1,21 @@
-clear
+useSuppliedSettings = ...
+    exist('population_analysis_use_supplied_settings', 'var') == 1 && ...
+    isequal(population_analysis_use_supplied_settings, true);
+if useSuppliedSettings
+    clearvars -except area monkey data_file stim_data_file ...
+        close_existing_figures tuning_source ...
+        population_analysis_use_supplied_settings
+    clear population_analysis_use_supplied_settings
+else
+    % Preserve the original script behavior: each direct run starts clean
+    % and uses the editable defaults below.
+    clear
+end
 
 %% Unified population analysis for MT/FST and Jim/Clay/Both
-% Edit the two options below, then run this script.
+% Edit the options below, then run this script. The default remains the
+% original 3DMotionQuick source. Run RunPopulationAnalysis_StimNoStim_ODweighted
+% to use the stimulation task's non-electrical-stimulation tuning instead.
 
 if ~exist('area', 'var')
     area = 'MT'; % 'MT' or 'FST'
@@ -15,8 +29,16 @@ if ~exist('data_file', 'var')
     data_file = '';
 end
 
+if ~exist('stim_data_file', 'var')
+    stim_data_file = '';
+end
+
 if ~exist('close_existing_figures', 'var')
     close_existing_figures = true;
+end
+
+if ~exist('tuning_source', 'var')
+    tuning_source = 'Quick'; % 'Quick' or 'StimNoStim'
 end
 
 if close_existing_figures
@@ -25,16 +47,53 @@ end
 
 area = validatestring(area, {'MT', 'FST'});
 monkey = validatestring(monkey, {'Both', 'Jim', 'Clay'});
+tuning_source = validatestring(tuning_source, {'Quick', 'StimNoStim'});
 
-[unit_table, data_file, workbook_audit] = ...
-    LoadLatestUnitTableGof(data_file);
+stim_noStim_index_audit = table();
+stim_table_load_audit = table();
+input_pipeline_metadata = struct();
+resolved_data_file = '';
+resolved_gof_file = '';
+resolved_stim_file = '';
+workbook_audit = struct();
+switch tuning_source
+    case 'Quick'
+        [unit_table, resolved_gof_file, workbook_audit] = ...
+            LoadLatestUnitTableGof(data_file);
+        resolved_data_file = resolved_gof_file;
+        data_file = resolved_gof_file;
+    case 'StimNoStim'
+        [unit_table, resolved_stim_file, input_pipeline_metadata, ...
+            stim_table_load_audit] = LoadUnitTableStimForPopulation( ...
+            stim_data_file);
+        resolved_data_file = resolved_stim_file;
+        [unit_table, stim_noStim_index_audit] = ...
+            PrepareStimNoStimPopulationAIOD(unit_table);
+        calculationErrorRows = find( ...
+            stim_noStim_index_audit.IndexStatus == "CalculationError");
+        if ~isempty(calculationErrorRows)
+            error('PopulationAnalysis:StimNoStimIndexCalculationFailed', ...
+                ['Stim NoStim AI/OD calculation failed for table row(s): ' ...
+                '%s. Inspect stim_noStim_index_audit.'], ...
+                mat2str(calculationErrorRows(:)'));
+        end
+        incompleteIndexRows = find( ...
+            stim_noStim_index_audit.IndexStatus ~= "Success");
+        if ~isempty(incompleteIndexRows)
+            warning('PopulationAnalysis:StimNoStimIndicesIncomplete', ...
+                ['%d row(s) have partial or invalid Stim NoStim AI/OD ' ...
+                'values. Only finite cue values will enter the analysis; ' ...
+                'inspect stim_noStim_index_audit.'], ...
+                numel(incompleteIndexRows));
+        end
+end
 
 colorsteps = [254 191 15; ...
     0 0 0; ...
     234 0 233; ...
     110 205 221] ./ 255;
 
-bias_table_all = build_bias_table(unit_table, area);
+bias_table_all = build_bias_table(unit_table, area, tuning_source);
 bias_table = apply_selection_rules(bias_table_all, area, monkey);
 
 if isempty(bias_table)
@@ -43,19 +102,39 @@ end
 
 summary_table = build_summary_table(bias_table, area, monkey);
 aixod_summary_table = build_aixod_summary_table(bias_table, area, monkey);
-[fig_2d, fig_3d] = plot_population_figures(bias_table, area, monkey, colorsteps);
+[fig_2d, fig_3d] = plot_population_figures( ...
+    bias_table, area, monkey, colorsteps, tuning_source);
 
 results = struct();
-results.data_file = data_file;
+results.data_file = resolved_data_file;
+results.gof_data_file = resolved_gof_file;
+results.stim_tuning_file = resolved_stim_file;
 results.workbook_audit = workbook_audit;
+results.stim_table_load_audit = stim_table_load_audit;
+results.input_pipeline_metadata = input_pipeline_metadata;
 results.area = area;
 results.monkey = monkey;
+results.tuning_source = tuning_source;
+results.ai_od_source = get_tuning_source_description(tuning_source);
+if strcmp(tuning_source, 'StimNoStim')
+    results.selection_source = ...
+        ['Behavior, p_AI, and Z3D_v_Z2D are read directly from ' ...
+        'unit_table_stim; AI and OD are recalculated from its NoStim ' ...
+        'tuning fields.'];
+else
+    results.selection_source = ...
+        'Behavior, p_AI, Z3D_v_Z2D, AI, and OD come from unit_table_gof.';
+end
+results.stim_noStim_index_audit = stim_noStim_index_audit;
 results.summary_table = summary_table;
 results.aixod_summary_table = aixod_summary_table;
 results.bias_table = bias_table;
 results.fig_2d = fig_2d;
 results.fig_3d = fig_3d;
 
+disp(' ')
+fprintf('AI/OD tuning source: %s\n', ...
+    get_tuning_source_description(tuning_source))
 disp(' ')
 disp('Summary table:')
 disp(summary_table)
@@ -69,7 +148,7 @@ assignin('base', 'population_aixod_summary_table', aixod_summary_table);
 assignin('base', 'population_bias_table', bias_table);
 
 
-function bias_table = build_bias_table(unit_table, area)
+function bias_table = build_bias_table(unit_table, area, tuning_source)
 condition_names = {'Dominant', 'Combined', 'Stereo', 'NonDominant'};
 [delta_bias, bias_nonstim, bias_stim, valid_bias_fit] = ...
     CalculateSigmoidFitBiases(unit_table, 4);
@@ -103,9 +182,12 @@ for rec = 1:row_count
         continue
     end
 
-    ch = unit_table.StimElec(rec);
-    ai_values = unit_table.AI{rec}(:, ch);
-    od_max = unit_table.OD_max{rec};
+    [ai_values, od_max] = ...
+        GetPopulationAIOD(unit_table, rec, tuning_source);
+    if strcmp(tuning_source, 'StimNoStim') && ...
+            (~isscalar(od_max) || ~isfinite(od_max))
+        continue
+    end
     z_value = unit_table.Z3D_v_Z2D{rec};
     monkey_name = get_table_text(unit_table.Monkey(rec));
     monkey_code = monkey_to_code(monkey_name);
@@ -122,6 +204,10 @@ for rec = 1:row_count
     for cond = 1:4
         source_idx = cond_order(cond);
         if source_idx > numel(ai_values)
+            continue
+        end
+        if strcmp(tuning_source, 'StimNoStim') && ...
+                ~isfinite(ai_values(source_idx))
             continue
         end
 
@@ -191,15 +277,11 @@ bias_table.FlipBias = bias_table.MergedEyeBias;
 end
 
 
-function bias_table = apply_selection_rules(bias_table, area, monkey)
+function bias_table = apply_selection_rules(bias_table, ~, monkey)
 switch monkey
     case 'Both'
-        if strcmp(area, 'FST')
-            is_clay = strcmp(bias_table.Monkey, "Clay");
-            is_jim = strcmp(bias_table.Monkey, "Jim");
-            keep_rows = is_clay | (is_jim & bias_table.AP <= 26);
-            bias_table = bias_table(keep_rows, :);
-        end
+        % Area membership is already enforced while building bias_table.
+        % Do not apply experiment-specific anatomical cutoffs here.
     case 'Jim'
         bias_table = bias_table(strcmp(bias_table.Monkey, "Jim"), :);
     case 'Clay'
@@ -273,13 +355,16 @@ for unit_idx = 1:numel(unit_types)
     end
 end
 
-summary_table = table(Area, MonkeySelection, UnitType, Condition, NPoints, NUnits, ...
+summary_table = table(Area, MonkeySelection, UnitType, Condition, ...
+    NPoints, NUnits, ...
     MeanAI, MeanBias, MeanAbsBias, MeanOD, WeightedSlope, WeightedIntercept, ...
     P_AI, R2_AI, P_AI_OD, P_AIxOD, R2_AI_OD, ...
     'VariableNames', {'Area', 'MonkeySelection', 'UnitType', 'Condition', ...
-    'NPoints', 'NUnits', 'MeanAI', 'MeanBias', 'MeanAbsBias', 'MeanOD', ...
+    'NPoints', 'NUnits', 'MeanAI', 'MeanBias', ...
+    'MeanAbsBias', 'MeanOD', ...
     'WeightedSlope', 'WeightedIntercept', 'P_AI', 'R2_AI', ...
-    'P_AI_withinCondition', 'P_AIxOD_withinCondition', 'R2_AI_withinCondition'});
+    'P_AI_withinCondition', 'P_AIxOD_withinCondition', ...
+    'R2_AI_withinCondition'});
 end
 
 
@@ -339,15 +424,22 @@ aixod_summary_table = table(Area, MonkeySelection, UnitType, ConditionSet, ...
 end
 
 
-function [fig_2d, fig_3d] = plot_population_figures(bias_table, area, monkey, colorsteps)
+function [fig_2d, fig_3d] = plot_population_figures( ...
+    bias_table, area, monkey, colorsteps, tuning_source)
 condition_names = {'Dominant', 'Combined', 'Stereo', 'NonDominant'};
 x_plot = -1:0.1:1;
+figure_suffix = '';
+if strcmp(tuning_source, 'StimNoStim')
+    figure_suffix = '_StimNoStim';
+end
 
-fig_2d = figure('Name', sprintf('%s_%s_2D', area, monkey), 'Color', 'w');
-setup_population_axes(fig_2d, area, monkey, '2D');
+fig_2d = figure('Name', ...
+    sprintf('%s_%s_2D%s', area, monkey, figure_suffix), 'Color', 'w');
+setup_population_axes(fig_2d, area, monkey, '2D', tuning_source);
 
-fig_3d = figure('Name', sprintf('%s_%s_3D', area, monkey), 'Color', 'w');
-setup_population_axes(fig_3d, area, monkey, '3D');
+fig_3d = figure('Name', ...
+    sprintf('%s_%s_3D%s', area, monkey, figure_suffix), 'Color', 'w');
+setup_population_axes(fig_3d, area, monkey, '3D', tuning_source);
 
 line_handles_2d = gobjects(4, 1);
 line_handles_3d = gobjects(4, 1);
@@ -379,24 +471,24 @@ add_population_legend(line_handles_3d, condition_names, monkey)
 end
 
 
-function setup_population_axes(fig_handle, area, monkey, unit_type)
+function setup_population_axes( ...
+    fig_handle, area, monkey, unit_type, tuning_source)
 figure(fig_handle)
 hold on
 
-if strcmp(unit_type, '2D')
-    y_lim = [-2.2, 2.2];
-    y_ticks = -2:1:2;
-    y_ticklabels = {'-2', 'Away', '0', 'Towards', '2'};
-else
-    y_lim = [-2.2, 2.2];
-    y_ticks = -2:1:2;
-    y_ticklabels = {'-2', 'Away', '0', 'Towards', '2'};
-end
+y_lim = [-2.2, 2.2];
+y_ticks = -2:1:2;
+y_ticklabels = {'-2', 'Away', '0', 'Towards', '2'};
 
 plot([-1, 1], [0, 0], 'k--')
 plot([0, 0], y_lim, 'k--')
-title(build_plot_title(area, monkey, unit_type), 'FontSize', 18)
-xlabel('Asymmetry Index', 'FontSize', 18)
+title(build_plot_title(area, monkey, unit_type, tuning_source), ...
+    'FontSize', 18)
+if strcmp(tuning_source, 'StimNoStim')
+    xlabel('Asymmetry Index (Stim task, NoStim trials)', 'FontSize', 18)
+else
+    xlabel('Asymmetry Index', 'FontSize', 18)
+end
 ylabel('Delta Bias', 'FontSize', 18)
 axis square
 box on
@@ -412,11 +504,14 @@ set(gca, 'FontSize', 18, 'LineWidth', 1)
 end
 
 
-function title_text = build_plot_title(area, monkey, unit_type)
+function title_text = build_plot_title(area, monkey, unit_type, tuning_source)
 if strcmp(monkey, 'Both')
     title_text = sprintf('%s %s neurons', area, unit_type);
 else
     title_text = sprintf('%s %s %s neurons', area, monkey, unit_type);
+end
+if strcmp(tuning_source, 'StimNoStim')
+    title_text = sprintf('%s - Stim task NoStim tuning', title_text);
 end
 end
 
@@ -481,7 +576,7 @@ function [slope, intercept] = get_weighted_fit_line(x, y, w)
 slope = nan;
 intercept = nan;
 
-valid_rows = isfinite(x) & isfinite(y) & isfinite(w);
+valid_rows = isfinite(x) & isfinite(y) & isfinite(w) & w > 0;
 x = x(valid_rows);
 y = y(valid_rows);
 w = w(valid_rows);
@@ -490,15 +585,15 @@ if numel(x) < 2
     return
 end
 
-if exist('type2_reg_weighted_matrix', 'file') == 2
-    [slope, intercept] = type2_reg_weighted_matrix(x, y, w);
+% The project's type2_reg_weighted_matrix implementation is weighted
+% least squares. Constraining that fit to pass through the origin gives
+% the closed-form weighted slope below.
+weighted_xx = sum(w(:) .* x(:) .^ 2);
+if ~isfinite(weighted_xx) || weighted_xx <= eps
     return
 end
-
-design = [x(:), ones(numel(x), 1)];
-coeff = lscov(design, y(:), w(:));
-slope = coeff(1);
-intercept = coeff(2);
+slope = sum(w(:) .* x(:) .* y(:)) ./ weighted_xx;
+intercept = 0;
 end
 
 
@@ -567,4 +662,18 @@ else
     text_value = string(value);
 end
 text_value = char(text_value);
+end
+
+
+function description = get_tuning_source_description(tuning_source)
+switch tuning_source
+    case 'Quick'
+        description = ...
+            '3DMotionQuick tuning at the stimulation acquisition channel';
+    case 'StimNoStim'
+        description = ['3DMotionStim non-electrical-stimulation tuning ' ...
+            'at the stimulation acquisition channel'];
+    otherwise
+        error('Unknown tuning source: %s', tuning_source)
+end
 end

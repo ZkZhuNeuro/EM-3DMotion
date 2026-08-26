@@ -6,3 +6,13 @@ Microsac/results_directional/
 Microsac/results_engbert/
 Microsac/population_results*/
 .codex_tmp/
+
+# Generated analysis artifacts belong under C:\EM, not in the code repo.
+**/output/
+**/outputs/
+**/results/
+**/tmp/
+CurrentSpread/UnifiedBestChannelReanalysis_*/
+CurrentSpread/*_Analysis_Summary_*.docx
+*.asv
+~$*.docx

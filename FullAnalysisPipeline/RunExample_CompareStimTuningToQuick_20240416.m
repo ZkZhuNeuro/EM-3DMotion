@@ -31,7 +31,7 @@ end
 outputDirectory = options.OutputDirectory;
 if strlength(outputDirectory) == 0
     outputDirectory = fullfile(outputRoot, ...
-        'StimVsQuick_20240416');
+        'StimVsQuick_20240416_WholeChannelZScore');
 end
 
 [Comparison, figures] = CompareStimTuningToQuickChannels( ...

@@ -46,7 +46,7 @@ for i = 1:n_recordings
     offsets_mm(i, :) = parseNumericVectorLocal(getValueAtRowLocal(offset_column, row_idx));
     guide_mm(i) = parseScalarDoubleLocal(getValueAtRowLocal(guide_column, row_idx));
     depth_mm(i) = parseScalarDoubleLocal(getValueAtRowLocal(depth_column, row_idx));
-    included_roi(i) = upper(roi_values(row_idx));
+    included_roi(i) = inclusion_audit.AnalysisROI(i);
 end
 
 if any(~isfinite(holes), 'all') || any(~isfinite(offsets_mm), 'all') || ...

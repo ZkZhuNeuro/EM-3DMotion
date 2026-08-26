@@ -57,6 +57,9 @@ verifyEqual(testCase, trialData.StimTrialFR.Source.TInfoFile, ...
 verifyEqual(testCase, ...
     trialData.StimTrialFR.ExtractionSummary.TInfoFile, ...
     string(tInfoFile));
+verifyTrue(testCase, isfield( ...
+    trialData.StimTrialFR, 'FiringRateOutlierMask'));
+verifyTrue(testCase, isfield(trialData.StimTrialFR, 'OutlierSettings'));
 clear cleanup
 end
 
@@ -117,16 +120,22 @@ verifyEqual(testCase, ...
     result.stim_tuning_SEM_noStim{1}(1, positiveIndex, 1), 1, ...
     'AbsTol', 1e-12);
 verifyEqual(testCase, ...
-    result.stim_tuning_n_noStim{1}(1, positiveIndex), 2);
+    result.stim_tuning_n_noStim{1}(1, positiveIndex, 1), 2);
 verifyEqual(testCase, ...
-    result.stim_tuning_n_stim{1}(1, positiveIndex), 2);
+    result.stim_tuning_n_stim{1}(1, positiveIndex, 1), 2);
 verifyEqual(testCase, ...
-    result.stim_tuning_n_merged{1}(1, positiveIndex), 4);
+    result.stim_tuning_n_merged{1}(1, positiveIndex, 1), 4);
+verifySize(testCase, result.stim_tuning_n_noStim{1}, [4 13 2]);
 
 trialFile = result.stim_tuning_trial_FR_file(1);
 verifyTrue(testCase, isfile(trialFile));
 trialData = load(trialFile, 'StimTrialFR');
 verifySize(testCase, trialData.StimTrialFR.FiringRateHz, [5 2]);
+verifySize(testCase, trialData.StimTrialFR.FiringRateOutlierMask, [5 2]);
+verifyEqual(testCase, nnz( ...
+    trialData.StimTrialFR.FiringRateOutlierMask), 0);
+verifyEqual(testCase, ...
+    trialData.StimTrialFR.OutlierSettings.Threshold, 3.5);
 verifyEqual(testCase, height(trialData.StimTrialFR.TrialSummary), 5);
 verifyFalse(testCase, isfield(trialData.StimTrialFR, 'Neuro'));
 verifyFalse(testCase, isfield(trialData.StimTrialFR, 'Tuning'));
@@ -175,6 +184,92 @@ verifyEqual(testCase, ...
     'AbsTol', 1e-12);
 verifyEqual(testCase, trialInfoAfterRecovery.datenum, ...
     trialInfoBeforeRecovery.datenum);
+clear cleanup
+end
+
+
+function testMADOutlierFilteringAndRecovery(testCase)
+root = string(tempname);
+mkdir(root);
+cleanup = onCleanup(@() rmdir(root, 's'));
+sessionFolder = fullfile(root, '20240104');
+mkdir(sessionFolder);
+
+channelOneCounts = [45 47 49 50 51 53 55 48 300];
+channelTwoCounts = [30 31 32 33 34 35 36 37 38];
+TrialInfo = repmat(makeTrial( ...
+    0, false, 1, 4002, 13636, 1, 1), 1, 9);
+for trialIndex = 1:9
+    TrialInfo(trialIndex) = makeTrial( ...
+        10 * (trialIndex - 1), false, 1, 4002, 13636, ...
+        channelOneCounts(trialIndex), channelTwoCounts(trialIndex));
+end
+Config = struct('ScrDistmm', 570);
+EditSel = ones(1, numel(TrialInfo));
+tInfoName = 'Synthetic_04Jan2024_MUA_3DMotionStim_TInfo.mat';
+selName = 'Synthetic_04Jan2024_MUA_3DMotionStim_SelIndex.mat';
+save(fullfile(sessionFolder, tInfoName), 'TrialInfo', 'Config');
+save(fullfile(sessionFolder, selName), 'EditSel', 'Config');
+
+Date = datetime(2024, 1, 4);
+Paths = {char(sessionFolder)};
+Monkey = {'Jim'};
+StimElec = 1;
+NChannels = 2;
+unit_table_gof = table(Date, Paths, Monkey, StimElec, NChannels);
+inputFile = fullfile(root, 'unit_table_gof.mat');
+save(inputFile, 'unit_table_gof');
+outputFolder = fullfile(root, 'StimOutput');
+
+result = BuildUnitTableStimTunings( ...
+    inputFile, outputFolder, ApplyEyeCheck=false, Resume=true);
+coherence = result.stim_tuning_coherence{1};
+positiveIndex = find(coherence == 0.36, 1);
+verifyEqual(testCase, ...
+    result.stim_tuning_mean_noStim{1}(1, positiveIndex, 1), 49.75, ...
+    'AbsTol', 1e-12);
+verifyEqual(testCase, ...
+    result.stim_tuning_n_noStim{1}(1, positiveIndex, 1), 8);
+verifyEqual(testCase, ...
+    result.stim_tuning_n_noStim{1}(1, positiveIndex, 2), 9);
+verifyEqual(testCase, ...
+    result.stim_tuning_FR_outlier_observation_count(1), 1);
+verifyEqual(testCase, result.stim_tuning_FR_outlier_trial_count(1), 1);
+
+trialFile = result.stim_tuning_trial_FR_file(1);
+trialData = load(trialFile, 'StimTrialFR');
+verifyEqual(testCase, trialData.StimTrialFR.FiringRateHz(9, 1), 300);
+verifyTrue(testCase, ...
+    trialData.StimTrialFR.FiringRateOutlierMask(9, 1));
+verifyFalse(testCase, ...
+    trialData.StimTrialFR.FiringRateOutlierMask(9, 2));
+
+stateFile = fullfile(outputFolder, 'unit_table_stim.mat');
+interrupted = load(stateFile, 'unit_table_stim', 'SessionManifest', ...
+    'PipelineMetadata');
+interrupted.unit_table_stim.stim_tuning_status(1) = "Pending";
+interrupted.unit_table_stim.stim_tuning_mean_noStim{1} = [];
+unit_table_stim = interrupted.unit_table_stim; %#ok<NASGU>
+SessionManifest = interrupted.SessionManifest; %#ok<NASGU>
+PipelineMetadata = interrupted.PipelineMetadata; %#ok<NASGU>
+save(stateFile, 'unit_table_stim', 'SessionManifest', 'PipelineMetadata', ...
+    '-v7.3');
+
+recovered = BuildUnitTableStimTunings( ...
+    inputFile, outputFolder, ApplyEyeCheck=false, Resume=true, Rows=1);
+verifyTrue(testCase, startsWith( ...
+    recovered.stim_tuning_message(1), "Recovered tuning"));
+verifyEqual(testCase, ...
+    recovered.stim_tuning_mean_noStim{1}(1, positiveIndex, 1), 49.75, ...
+    'AbsTol', 1e-12);
+verifyEqual(testCase, ...
+    recovered.stim_tuning_n_noStim{1}(1, positiveIndex, 1), 8);
+verifyEqual(testCase, ...
+    recovered.stim_tuning_FR_outlier_observation_count(1), 1);
+validation = ValidateUnitTableStimTunings( ...
+    stateFile, WriteReport=false);
+outlierMetric = validation.Metric == "FROutlierObservations";
+verifyEqual(testCase, validation.Value(outlierMetric), 1);
 clear cleanup
 end
 

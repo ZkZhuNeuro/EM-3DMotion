@@ -42,7 +42,6 @@ end
 BiasTable_max = table();
 
 for rec = 1:size(MIDTable.Delta_bias, 2)
-    if (MIDTable.AP{rec} <= 26 && MIDTable.Monkey{rec} == 1) | MIDTable.Monkey{rec} == 2
     if MIDTable.OD_max_eye{rec} == 'L'
         BiasTable_max = [BiasTable_max; ...
             array2table([MIDTable.AI{rec}(2), MIDTable.OD_max{rec}, 1, MIDTable.Z3D_v_Z2D{rec}, MIDTable.Delta_bias{rec}(2), rec, MIDTable.Monkey{rec}; ... % Dom
@@ -57,7 +56,6 @@ for rec = 1:size(MIDTable.Delta_bias, 2)
             MIDTable.AI{rec}(4), MIDTable.OD_max{rec}, 3, MIDTable.Z3D_v_Z2D{rec}, MIDTable.Delta_bias{rec}(4), rec, MIDTable.Monkey{rec}; ... % Stereo
             MIDTable.AI{rec}(2), MIDTable.OD_max{rec}, 4, MIDTable.Z3D_v_Z2D{rec}, MIDTable.Delta_bias{rec}(2), rec, MIDTable.Monkey{rec}], ... % NonDom
             'VariableNames', {'AI','OD_raw','Condition','z2D3D','Bias', 'Session', 'Monkey'})];
-    end
     end
 end
 

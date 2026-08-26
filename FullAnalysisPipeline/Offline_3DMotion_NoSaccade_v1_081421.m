@@ -50,6 +50,10 @@ elseif length(varargin)==2 || length(varargin)>= 3
     SelectionInfo = logical(SelectionInfo_file.EditSel);
     TrialInfo = TrialInfo(SelectionInfo); % Only look at selected trials
 end
+selectedZeroCoherenceMask = arrayfun( ...
+    @(trial) any(trial.EID == 10000), TrialInfo);
+selectedZeroCoherenceTrials = TrialInfo(selectedZeroCoherenceMask);
+originalTrialFieldNames = fieldnames(TrialInfo);
 filename_base = extractBefore(file_names{1},'3DM');
 DashIdx = strfind(filename_base, '_');
 FNameIdx = strfind(filename_base, 'TT');
@@ -133,7 +137,17 @@ FixPoint = [0, 0, 0]; %[x, y, z] mm position of the fixation point
 
 if datenum(recordingDate) ~= datenum(2022,05,20) % Bad eye data on 5/20/2022
     try
-        [TrialInfo, version_vergence, version_confirmed, vergence_confirmed] = Offline_3DMotion_VersionVergenceCondCheck(IOD, Config, FixPoint, TrialInfo, recordingDate, eye_plotFlag);
+        nonzeroTrials = TrialInfo(~selectedZeroCoherenceMask);
+        [nonzeroTrials, version_vergence, version_confirmed, vergence_confirmed] = Offline_3DMotion_VersionVergenceCondCheck(IOD, Config, FixPoint, nonzeroTrials, recordingDate, eye_plotFlag);
+        addedFieldNames = setdiff(fieldnames(nonzeroTrials), ...
+            originalTrialFieldNames, 'stable');
+        if ~isempty(addedFieldNames)
+            nonzeroTrials = rmfield(nonzeroTrials, addedFieldNames);
+        end
+        % The eye helper deliberately rejects all zero-coherence trials.
+        % Keep those trials because they form the saved Quick zero bin and
+        % cannot be evaluated by that helper's stimulus-period check.
+        TrialInfo = [nonzeroTrials selectedZeroCoherenceTrials];
     catch ME
         disp(['Version/vergence check failed for ' recordingDate '; continuing without additional trial rejection. ' ME.message]);
     end
@@ -153,6 +167,13 @@ max_blocks = 20;
 % If there are less trials in each block than 32 trials. Need to change! 
 
 CoherenceArray = [-22 -14 -10 -8 -4 -2 2 4 8 10 14 22]./22;
+% Older Quick sessions presented true zero-coherence trials (ecode 10000).
+% Preserve those trials when present; later sessions keep the 12-bin grid.
+hasZeroCoherenceTrials = any(arrayfun( ...
+    @(trial) any(trial.EID == 10000), TrialInfo));
+if hasZeroCoherenceTrials
+    CoherenceArray = [-22 -14 -10 -8 -4 -2 0 2 4 8 10 14 22]./22;
+end
 ConditionArray = [1 2 3 4];
 
 BlockOffset = 0;

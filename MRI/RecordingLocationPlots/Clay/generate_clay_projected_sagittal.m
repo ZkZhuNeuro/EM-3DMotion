@@ -3,6 +3,20 @@
 % separate MT and FST figures. This includes MRI slices with no recording
 % position that fall between occupied slices.
 
+if ~exist('claySagittalTargetMLVoxels', 'var'), claySagittalTargetMLVoxels = []; end
+if ~exist('claySagittalCropPadding', 'var'), claySagittalCropPadding = [12, 18]; end
+if ~exist('claySagittalCropSpan', 'var'), claySagittalCropSpan = []; end
+if ~exist('claySagittalCropShift', 'var'), claySagittalCropShift = [0, 0]; end
+if ~exist('claySagittalFilenameSuffix', 'var'), claySagittalFilenameSuffix = ''; end
+if ~exist('claySagittalExportSVG', 'var'), claySagittalExportSVG = false; end
+if ~exist('claySagittalExportPDF', 'var'), claySagittalExportPDF = false; end
+if ~exist('claySagittalExportDimensionsPoints', 'var')
+    claySagittalExportDimensionsPoints = [];
+end
+if ~exist('claySagittalRasterDimensionsPixels', 'var')
+    claySagittalRasterDimensionsPixels = [];
+end
+
 output_dir = 'C:\EM\RecordingLocationPlots\Clay\ProjectedSagittal';
 workbook_path = 'P:\Clay\NeuroData\RecordingRecord_Stimulation.xlsx';
 script_dir = fileparts(mfilename('fullpath'));
@@ -20,6 +34,9 @@ ROI_nii_file = 'P:\MRI\R14008_GridScan\R14008_LEV00_ROIs_org2Grid.nii.gz';
 ROI_intensity = [46, 38, 25, 24];
 color_mat = [0 0.5 0.5; 1 1 0; plotOptions.AreaColors.MT; ...
     plotOptions.AreaColors.FST];
+% Sagittal views show MSTd, MSTl, MT, and FST, in that order.
+Sagittal_dot_colors = [0.00, 0.45, 0.95; 0.00, 0.70, 0.20];
+Sagittal_dot_size = 32; % Four times the area gives twice the diameter.
 
 tb = readtable(workbook_path, 'VariableNamingRule', 'preserve');
 recording_dates = normalizeDateColumnLocal(getTableColumnLocal(tb, 'Date'));
@@ -46,15 +63,16 @@ for i = 1:n_recordings
     offsets_mm(i, :) = parseNumericVectorLocal(getValueAtRowLocal(offset_column, row_idx));
     guide_mm(i) = parseScalarDoubleLocal(getValueAtRowLocal(guide_column, row_idx));
     depth_mm(i) = parseScalarDoubleLocal(getValueAtRowLocal(depth_column, row_idx));
-    included_roi(i) = upper(roi_values(row_idx));
+    included_roi(i) = inclusion_audit.AnalysisROI(i);
 end
 
 if any(~isfinite(holes), 'all') || any(~isfinite(offsets_mm), 'all') || ...
         any(~isfinite(guide_mm)) || any(~isfinite(depth_mm))
     error('One or more included rows have invalid hole, offset, guide, or depth values.');
 end
-if nnz(included_roi == "MT") ~= 40 || nnz(included_roi == "FST") ~= 62
-    error('Expected 40 MT and 62 FST unit_table_gof sessions, but found %d and %d.', ...
+if nnz(included_roi == "MT") ~= inclusion_audit.MTCount || ...
+        nnz(included_roi == "FST") ~= inclusion_audit.FSTCount
+    error('Clay ROI counts do not match unit_table_gof: found %d MT and %d FST.', ...
         nnz(included_roi == "MT"), nnz(included_roi == "FST"));
 end
 
@@ -72,6 +90,24 @@ all_ml_voxels = min(occupied_ml_voxels):max(occupied_ml_voxels);
 hidden_ml_voxels = setdiff(all_ml_voxels, occupied_ml_voxels);
 fprintf('Occupied MRI ML voxels: %s\n', mat2str(occupied_ml_voxels(:).'));
 fprintf('Intermediate MRI ML voxels: %s\n', mat2str(hidden_ml_voxels(:).'));
+full_sagittal_run = isempty(claySagittalTargetMLVoxels);
+if ~full_sagittal_run
+    requested_ml_voxels = unique(round(claySagittalTargetMLVoxels(:).'));
+    if any(~ismember(requested_ml_voxels, all_ml_voxels))
+        error('Requested Clay sagittal ML voxels are outside %d:%d: %s', ...
+            min(all_ml_voxels), max(all_ml_voxels), mat2str(requested_ml_voxels));
+    end
+    all_ml_voxels = requested_ml_voxels;
+end
+assert(numel(claySagittalCropPadding) == 2 && ...
+    all(isfinite(claySagittalCropPadding)) && all(claySagittalCropPadding >= 0), ...
+    'claySagittalCropPadding must contain nonnegative [x y] padding.');
+if ~isempty(claySagittalExportDimensionsPoints)
+    assert(numel(claySagittalExportDimensionsPoints) == 2 && ...
+        all(isfinite(claySagittalExportDimensionsPoints)) && ...
+        all(claySagittalExportDimensionsPoints > 0), ...
+        'claySagittalExportDimensionsPoints must contain positive [width height].');
+end
 
 struct_nii = load_nii(Img_nii_file);
 roi_nii = load_nii(ROI_nii_file);
@@ -80,6 +116,33 @@ visibility_cleanup = onCleanup(@() set(groot, 'defaultFigureVisible', old_visibi
 set(groot, 'defaultFigureVisible', 'off');
 
 areas = ["MT", "FST"];
+[all_ap_voxels_plot, all_depth_voxels_plot] = computeSagittalCoordinatesLocal( ...
+    holes, guide_mm + depth_mm, offsets_mm, OrigPoint_Voxel);
+[sagittal_x_limits, sagittal_y_limits] = computeSagittalCropLocal( ...
+    roi_nii.img, all_ml_voxels, ROI_intensity, ...
+    all_ap_voxels_plot, all_depth_voxels_plot, ...
+    claySagittalCropPadding(1), claySagittalCropPadding(2));
+required_x_limits = sagittal_x_limits;
+required_y_limits = sagittal_y_limits;
+slice_size = size(squeeze(roi_nii.img(all_ml_voxels(1) + 1, :, :)));
+if ~isempty(claySagittalCropSpan)
+    assert(numel(claySagittalCropSpan) == 2 && ...
+        all(isfinite(claySagittalCropSpan)) && all(claySagittalCropSpan > 0), ...
+        'claySagittalCropSpan must contain positive [x y] spans.');
+    sagittal_x_limits = enforceCropSpanLocal(sagittal_x_limits, ...
+        claySagittalCropSpan(1), slice_size(2));
+    sagittal_y_limits = enforceCropSpanLocal(sagittal_y_limits, ...
+        claySagittalCropSpan(2), slice_size(1));
+end
+assert(numel(claySagittalCropShift) == 2 && ...
+    all(isfinite(claySagittalCropShift)), ...
+    'claySagittalCropShift must contain finite [x y] offsets.');
+sagittal_x_limits = shiftCropLimitsLocal(sagittal_x_limits, ...
+    claySagittalCropShift(1), slice_size(2), required_x_limits);
+sagittal_y_limits = shiftCropLimitsLocal(sagittal_y_limits, ...
+    claySagittalCropShift(2), slice_size(1), required_y_limits);
+fprintf('Clay sagittal crop: x=%s, y=%s\n', ...
+    mat2str(sagittal_x_limits), mat2str(sagittal_y_limits));
 generated_count = 0;
 generated_files = strings(numel(all_ml_voxels), 1);
 for ml_voxel = all_ml_voxels
@@ -108,36 +171,23 @@ for ml_voxel = all_ml_voxels
     fig = figure('Color', 'w', 'Visible', 'off', 'Position', [100, 100, 1000, 800]);
     imshow(image_slice, 'InitialMagnification', 1000);
     hold on;
-    for r = 1:length(ROI_intensity)
-        slice_roi = roi_slice == ROI_intensity(r);
-        color_layer = cat(3, ...
-            ones(size(image_slice)) .* color_mat(r, 1), ...
-            ones(size(image_slice)) .* color_mat(r, 2), ...
-            ones(size(image_slice)) .* color_mat(r, 3));
-        h_roi = imshow(color_layer, 'InitialMagnification', 750);
-        set(h_roi, 'AlphaData', 1 * slice_roi);
-    end
+    overlayROIsVectorLocal(roi_slice, ROI_intensity, color_mat);
 
     dot_handles = gobjects(numel(areas), 1);
     for area_idx = 1:numel(areas)
         area = areas(area_idx);
         area_mask = included_roi == area;
-        area_holes = holes(area_mask, :);
-        area_offsets = offsets_mm(area_mask, :);
-        area_total_depth = guide_mm(area_mask) + depth_mm(area_mask);
-        [ap_voxel, depth_voxel] = computeSagittalCoordinatesLocal( ...
-            area_holes, area_total_depth, area_offsets, OrigPoint_Voxel);
-
-        dot_color = color_mat(area_idx + 2, :);
-        dot_handles(area_idx) = scatter(ap_voxel, depth_voxel, 8, dot_color, 'filled', ...
-            'MarkerEdgeColor', dot_color .* 0.55, 'LineWidth', 0.5, ...
-            'MarkerFaceAlpha', 0.75, 'MarkerEdgeAlpha', 0.85);
+        dot_color = Sagittal_dot_colors(area_idx, :);
+        dot_handles(area_idx) = scatter(all_ap_voxels_plot(area_mask), ...
+            all_depth_voxels_plot(area_mask), Sagittal_dot_size, dot_color, 'filled', ...
+            'MarkerEdgeColor', 'k', 'LineWidth', 0.5, ...
+            'MarkerFaceAlpha', 0.90, 'MarkerEdgeAlpha', 1);
     end
 
-    legend(dot_handles, cellstr(areas), 'Location', 'southeast', 'Box', 'off', ...
+    legend(dot_handles, cellstr(areas), 'Location', 'northeast', 'Box', 'off', ...
         'FontSize', 6, 'AutoUpdate', 'off');
-    xlim([min(brain_cols), max(brain_cols)]);
-    ylim([min(brain_rows), max(brain_rows)]);
+    xlim(sagittal_x_limits);
+    ylim(sagittal_y_limits);
     title({sprintf('Clay MT + FST | sagittal MRI slice index %d (ML voxel %d)', ...
         ml_voxel + 1, ml_voxel), ...
         sprintf('%s | MT %d + FST %d included locations', slice_context, ...
@@ -145,10 +195,28 @@ for ml_voxel = all_ml_voxels
         'FontSize', 8, 'Interpreter', 'none');
     hold off;
 
-    output_name = sprintf('Clay_MT-FST_MLVoxel%03d_%s_SagittalProjectedLocations.png', ...
-        ml_voxel, filename_context);
+    output_name = sprintf('Clay_MT-FST_MLVoxel%03d_%s_SagittalProjectedLocations%s.png', ...
+        ml_voxel, filename_context, char(string(claySagittalFilenameSuffix)));
     output_file = fullfile(output_dir, output_name);
-    exportgraphics(fig, output_file, 'Resolution', 300);
+    export_options = sagittalExportOptionsLocal( ...
+        claySagittalExportDimensionsPoints, false);
+    exportgraphics(fig, output_file, export_options{:});
+    if ~isempty(claySagittalRasterDimensionsPixels)
+        normalizeRasterCanvasLocal(output_file, ...
+            claySagittalRasterDimensionsPixels);
+    end
+    if claySagittalExportSVG
+        svg_file = replace(output_file, '.png', '.svg');
+        export_options = sagittalExportOptionsLocal( ...
+            claySagittalExportDimensionsPoints, true);
+        exportgraphics(fig, svg_file, export_options{:});
+    end
+    if claySagittalExportPDF
+        pdf_file = replace(output_file, '.png', '.pdf');
+        export_options = sagittalExportOptionsLocal( ...
+            claySagittalExportDimensionsPoints, true);
+        exportgraphics(fig, pdf_file, export_options{:});
+    end
     close(fig);
     generated_count = generated_count + 1;
     generated_files(generated_count) = string(output_file);
@@ -161,14 +229,16 @@ if generated_count ~= expected_count
     error('Expected %d sagittal plots, but generated %d.', expected_count, generated_count);
 end
 
-existing_plots = dir(fullfile(output_dir, 'Clay_*_SagittalProjectedLocations.png'));
-generated_files_lower = lower(generated_files);
 removed_count = 0;
-for i = 1:numel(existing_plots)
-    existing_file = string(fullfile(existing_plots(i).folder, existing_plots(i).name));
-    if ~any(lower(existing_file) == generated_files_lower)
-        delete(char(existing_file));
-        removed_count = removed_count + 1;
+if full_sagittal_run
+    existing_plots = dir(fullfile(output_dir, 'Clay_*_SagittalProjectedLocations.png'));
+    generated_files_lower = lower(generated_files);
+    for i = 1:numel(existing_plots)
+        existing_file = string(fullfile(existing_plots(i).folder, existing_plots(i).name));
+        if ~any(lower(existing_file) == generated_files_lower)
+            delete(char(existing_file));
+            removed_count = removed_count + 1;
+        end
     end
 end
 
@@ -284,6 +354,111 @@ end
 image_slice(image_slice == 0) = 255;
 roi_slice = double(squeeze(roi_volume(ml_index, :, :)));
 roi_slice = fliplr(imrotate(roi_slice, 180));
+end
+
+function [x_limits, y_limits] = computeSagittalCropLocal( ...
+        roi_volume, ml_voxels, roi_intensity, dot_x, dot_y, x_padding, y_padding)
+content_x = double(dot_x(:));
+content_y = double(dot_y(:));
+slice_size = [];
+for ml_voxel = ml_voxels
+    ml_index = ml_voxel + 1;
+    roi_slice = double(squeeze(roi_volume(ml_index, :, :)));
+    roi_slice = fliplr(imrotate(roi_slice, 180));
+    slice_size = size(roi_slice);
+    [roi_rows, roi_cols] = find(ismember(roi_slice, roi_intensity));
+    content_x = [content_x; double(roi_cols)]; %#ok<AGROW>
+    content_y = [content_y; double(roi_rows)]; %#ok<AGROW>
+end
+content_x = content_x(isfinite(content_x));
+content_y = content_y(isfinite(content_y));
+assert(~isempty(content_x) && ~isempty(content_y) && ~isempty(slice_size), ...
+    'Cannot determine the Clay sagittal crop from empty dots and ROI masks.');
+x_limits = [max(0.5, floor(min(content_x)) - x_padding), ...
+    min(slice_size(2) + 0.5, ceil(max(content_x)) + x_padding)];
+y_limits = [max(0.5, floor(min(content_y)) - y_padding), ...
+    min(slice_size(1) + 0.5, ceil(max(content_y)) + y_padding)];
+end
+
+function overlayROIsVectorLocal(roi_slice, roi_intensity, color_mat)
+% Draw each occupied ROI voxel as a vector rectangle. The structural MRI
+% remains rasterized, while ROI shapes stay editable in SVG/PDF exports.
+for r = 1:length(roi_intensity)
+    [rows, cols] = find(roi_slice == roi_intensity(r));
+    if isempty(rows), continue; end
+    x_vertices = [cols.' - 0.5; cols.' + 0.5; cols.' + 0.5; cols.' - 0.5];
+    y_vertices = [rows.' - 0.5; rows.' - 0.5; rows.' + 0.5; rows.' + 0.5];
+    patch(x_vertices, y_vertices, color_mat(r, :), ...
+        'EdgeColor', 'none', 'FaceAlpha', 1);
+end
+end
+
+function limits = enforceCropSpanLocal(limits, target_span, dimension_size)
+required_span = diff(limits);
+assert(target_span + eps(target_span) >= required_span, ...
+    'Requested crop span %.3f is smaller than required content span %.3f.', ...
+    target_span, required_span);
+limits = mean(limits) + [-0.5, 0.5] .* target_span;
+if limits(1) < 0.5
+    limits = limits + (0.5 - limits(1));
+end
+if limits(2) > dimension_size + 0.5
+    limits = limits - (limits(2) - dimension_size - 0.5);
+end
+end
+
+function limits = shiftCropLimitsLocal(limits, shift, dimension_size, required_limits)
+limits = limits + shift;
+assert(limits(1) >= 0.5 && limits(2) <= dimension_size + 0.5, ...
+    'Shifted crop extends outside the MRI slice.');
+assert(limits(1) <= required_limits(1) && limits(2) >= required_limits(2), ...
+    'Shifted crop would exclude at least one dot or requested ROI voxel.');
+end
+
+function options = sagittalExportOptionsLocal(dimensions_points, vector_output)
+if vector_output
+    options = {'ContentType', 'vector'};
+else
+    options = {'Resolution', 300};
+end
+if ~isempty(dimensions_points)
+    if vector_output
+        export_dimensions = dimensions_points;
+        export_units = 'points';
+    else
+        export_dimensions = round(dimensions_points .* 300 ./ 72);
+        export_units = 'pixels';
+    end
+    options = [options, {'Width', export_dimensions(1), ...
+        'Height', export_dimensions(2), 'Units', export_units, ...
+        'Padding', 0, 'PreserveAspectRatio', 'on'}];
+end
+end
+
+function normalizeRasterCanvasLocal(file_path, target_dimensions)
+assert(numel(target_dimensions) == 2 && all(target_dimensions > 0), ...
+    'Raster target dimensions must contain positive [width height].');
+image_data = imread(file_path);
+source_height = size(image_data, 1);
+source_width = size(image_data, 2);
+target_width = round(target_dimensions(1));
+target_height = round(target_dimensions(2));
+assert(source_width <= target_width && source_height <= target_height, ...
+    'Exported PNG is larger than its requested normalized canvas.');
+if source_width == target_width && source_height == target_height
+    return;
+end
+if isfloat(image_data)
+    white_value = cast(1, 'like', image_data);
+else
+    white_value = intmax(class(image_data));
+end
+canvas = repmat(white_value, target_height, target_width, size(image_data, 3));
+row_start = floor((target_height - source_height) / 2) + 1;
+col_start = floor((target_width - source_width) / 2) + 1;
+canvas(row_start:(row_start + source_height - 1), ...
+    col_start:(col_start + source_width - 1), :) = image_data;
+imwrite(canvas, file_path);
 end
 
 function [ap_voxel, depth_voxel] = computeSagittalCoordinatesLocal( ...

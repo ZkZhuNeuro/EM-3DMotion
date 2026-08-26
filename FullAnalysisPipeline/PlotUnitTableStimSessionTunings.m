@@ -3,17 +3,17 @@ function FigureManifest = PlotUnitTableStimSessionTunings(tableFile, options)
 %
 % FigureManifest = PlotUnitTableStimSessionTunings() loads the finalized
 % unit_table_stim and writes three 2-by-8 figures per session: NoStim, Stim,
-% and Merged (all trials pooled). Within each trial group, every cue of each
-% channel is Z-scored independently across its valid coherence means, matching
-% the unit_table_gof.tuning_z convention. The saved SEM is divided by the same
-% cue- and channel-specific standard deviation. Tiles follow the stored
-% physical probe order while each title identifies the acquisition channel.
+% and Merged (all trials pooled). Within each trial group, every channel is
+% Z-scored once across all of its valid cue-by-coherence means. This preserves
+% firing-rate offsets among cues. The saved SEM is divided by the same
+% channel-wide standard deviation. Tiles follow the stored physical probe
+% order while each title identifies the acquisition channel.
 %
 % Default input:
 %   C:\EM\StimTuningAnalysis\unit_table_stim.mat
 %
 % Default output:
-%   C:\EM\StimTuningAnalysis\TuningFigures_16Channels_ZScore\
+%   C:\EM\StimTuningAnalysis\TuningFigures_16Channels_WholeChannelZScore\
 %       NoStim\
 %       Stim\
 %       Merged\
@@ -66,7 +66,7 @@ validateTableColumns(tableData);
 outputFolder = options.OutputFolder;
 if strlength(outputFolder) == 0
     outputFolder = fullfile(fileparts(tableFile), ...
-        'TuningFigures_16Channels_ZScore');
+        'TuningFigures_16Channels_WholeChannelZScore');
 end
 if ~isfolder(outputFolder)
     mkdir(outputFolder);
@@ -153,7 +153,7 @@ for rowPosition = 1:numel(rows)
         groupStart = tic;
         group = groups(groupIndex);
         groupData = session.Groups(groupIndex);
-        TrialCount(manifestIndex) = sum(groupData.Count, 'all');
+        TrialCount(manifestIndex) = groupData.TrialCount;
         savePNG = options.SavePNG && (options.OverwriteExisting || ...
             ~isfile(PNGFile(manifestIndex)));
         saveFIG = options.SaveFIG && (options.OverwriteExisting || ...
@@ -251,6 +251,9 @@ required = ["Date", "Monkey", "StimElec", "NChannels", ...
     "stim_tuning_SEM_stim", "stim_tuning_n_stim", ...
     "stim_tuning_mean_merged", "stim_tuning_SEM_merged", ...
     "stim_tuning_n_merged"];
+required = [required, "stim_tuning_noStim_trial_count", ...
+    "stim_tuning_stim_trial_count", ...
+    "stim_tuning_included_trial_count"];
 missing = setdiff(required, string(tableData.Properties.VariableNames));
 if ~isempty(missing)
     error('UnitTableStimFigures:MissingColumns', ...
@@ -290,9 +293,9 @@ end
 
 session.Groups = repmat(struct( ...
     'Name', "", 'DisplayName', "", 'Mean', [], 'SEM', [], ...
-    'Count', []), 1, numel(groups));
+    'Count', [], 'TrialCount', NaN), 1, numel(groups));
 for groupIndex = 1:numel(groups)
-    [meanColumn, semColumn, countColumn, displayName] = ...
+    [meanColumn, semColumn, countColumn, trialCountColumn, displayName] = ...
         groupColumns(groups(groupIndex));
     meanFR = tableData.(meanColumn){row};
     semFR = tableData.(semColumn){row};
@@ -304,80 +307,74 @@ for groupIndex = 1:numel(groups)
             'Row %d %s mean/SEM must have size %s.', ...
             row, groups(groupIndex), mat2str(expectedSize));
     end
-    if ~isequal(size(count), expectedSize(1:2))
+    if isequal(size(count), expectedSize(1:2))
+        count = repmat(double(count), [1 1 expectedChannels]);
+    elseif isequal(size(count), expectedSize)
+        count = double(count);
+    else
         error('UnitTableStimFigures:InvalidCountSize', ...
-            'Row %d %s count matrix must have size %s.', ...
-            row, groups(groupIndex), mat2str(expectedSize(1:2)));
+            ['Row %d %s count array must have size %s (legacy) or ' ...
+            '%s (channel-specific).'], row, groups(groupIndex), ...
+            mat2str(expectedSize(1:2)), mat2str(expectedSize));
     end
     session.Groups(groupIndex) = struct( ...
         'Name', groups(groupIndex), 'DisplayName', displayName, ...
         'Mean', double(meanFR), 'SEM', double(semFR), ...
-        'Count', double(count));
+        'Count', count, ...
+        'TrialCount', double(tableData.(trialCountColumn)(row)));
 end
 end
 
 
-function [meanColumn, semColumn, countColumn, displayName] = ...
+function [meanColumn, semColumn, countColumn, trialCountColumn, ...
+    displayName] = ...
     groupColumns(group)
 switch group
     case "NoStim"
         meanColumn = "stim_tuning_mean_noStim";
         semColumn = "stim_tuning_SEM_noStim";
         countColumn = "stim_tuning_n_noStim";
+        trialCountColumn = "stim_tuning_noStim_trial_count";
         displayName = "NoStim trials only";
     case "Stim"
         meanColumn = "stim_tuning_mean_stim";
         semColumn = "stim_tuning_SEM_stim";
         countColumn = "stim_tuning_n_stim";
+        trialCountColumn = "stim_tuning_stim_trial_count";
         displayName = "Stim trials only";
     case "Merged"
         meanColumn = "stim_tuning_mean_merged";
         semColumn = "stim_tuning_SEM_merged";
         countColumn = "stim_tuning_n_merged";
+        trialCountColumn = "stim_tuning_included_trial_count";
         displayName = "Merged - all trials pooled";
 end
 end
 
 
 function session = zScoreSessionTuning(session)
-% Match unit_table_gof.tuning_z: standardize each cue across coherence.
+% Standardize each channel once across its complete cue-by-coherence matrix.
 for groupIndex = 1:numel(session.Groups)
     meanFR = session.Groups(groupIndex).Mean;
     semFR = session.Groups(groupIndex).SEM;
     count = session.Groups(groupIndex).Count;
+    valid = count > 0 & isfinite(meanFR);
+    [meanFR, ~, channelScale] = ...
+        ZScoreTuningWithinChannel(meanFR, valid);
+    semFR(~valid) = NaN;
 
     for acquisitionChannel = 1:size(meanFR, 3)
-        for cue = 1:size(meanFR, 1)
-            cueMean = reshape( ...
-                meanFR(cue, :, acquisitionChannel), 1, []);
-            cueSEM = reshape( ...
-                semFR(cue, :, acquisitionChannel), 1, []);
-            valid = count(cue, :) > 0 & isfinite(cueMean);
-            cueMean(~valid) = NaN;
-            cueSEM(~valid) = NaN;
-
-            validValues = cueMean(valid);
-            if numel(validValues) < 2
-                cueMean(valid) = NaN;
-                cueSEM(valid) = NaN;
-            else
-                cueCenter = mean(validValues);
-                cueScale = std(validValues, 0);
-                if isfinite(cueScale) && cueScale > 0
-                    cueMean(valid) = ...
-                        (cueMean(valid) - cueCenter) ./ cueScale;
-                    finiteSEM = valid & isfinite(cueSEM);
-                    cueSEM(finiteSEM) = cueSEM(finiteSEM) ./ cueScale;
-                else
-                    % A constant tuning curve has no defined Z-score.
-                    cueMean(valid) = NaN;
-                    cueSEM(valid) = NaN;
-                end
-            end
-
-            meanFR(cue, :, acquisitionChannel) = cueMean;
-            semFR(cue, :, acquisitionChannel) = cueSEM;
+        channelValid = valid(:, :, acquisitionChannel);
+        channelSEM = semFR(:, :, acquisitionChannel);
+        scale = channelScale(acquisitionChannel);
+        finiteSEM = channelValid & isfinite(channelSEM);
+        if isfinite(scale) && scale > 0
+            channelSEM(finiteSEM) = channelSEM(finiteSEM) ./ scale;
+        else
+            % Fewer than two values or a constant channel is undefined.
+            channelSEM(channelValid) = NaN;
         end
+        semFR(:, :, acquisitionChannel) = channelSEM;
     end
 
     session.Groups(groupIndex).Mean = meanFR;
@@ -447,7 +444,9 @@ for probePosition = 1:numel(session.ChannelOrder)
         y = reshape(groupData.Mean(cue, :, acquisitionChannel), 1, []);
         errorValue = reshape( ...
             groupData.SEM(cue, :, acquisitionChannel), 1, []);
-        present = groupData.Count(cue, :) > 0 & isfinite(y);
+        present = reshape( ...
+            groupData.Count(cue, :, acquisitionChannel), 1, []) > 0 & ...
+            isfinite(y);
         y(~present) = NaN;
         legendHandles(cue) = plot(axesHandle, session.Coherence, y, ...
             '-o', 'Color', colors(cue, :), ...
@@ -495,11 +494,11 @@ for probePosition = 1:numel(session.ChannelOrder)
     end
 end
 
-trialCount = sum(groupData.Count, 'all');
+trialCount = groupData.TrialCount;
 stimText = formatStimChannel(stimChannel);
 titleLines = {sprintf('Row %03d | %s | %s | Stim channel %s', ...
     row, monkey, dateLabel, stimText), ...
-    sprintf(['%s | %d trials | cue-wise Z-score +/- scaled SEM | ' ...
+    sprintf(['%s | %d trials | whole-channel Z-score +/- scaled SEM | ' ...
     'shared session y-axis'], ...
     groupData.DisplayName, trialCount)};
 if tableStatus ~= "Success"

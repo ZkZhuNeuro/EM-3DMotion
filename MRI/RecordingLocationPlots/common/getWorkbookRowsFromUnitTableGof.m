@@ -1,5 +1,8 @@
 function [rowIndices, audit] = getWorkbookRowsFromUnitTableGof(tb, monkeyName)
-% Match workbook rows exactly to the session keys in unit_table_gof.
+% Match workbook rows to the analysis sessions in unit_table_gof.
+% Exact Date-ROI matches are preferred. If a workbook ROI label was edited
+% after unit_table_gof was built, an otherwise unique date match is used and
+% the analysis ROI from unit_table_gof remains authoritative.
 
 gofPath = 'C:\EM\BehaviorFitting\unit_table_gof.mat';
 loaded = load(gofPath, 'unit_table_gof');
@@ -27,21 +30,37 @@ assert(numel(unique(gofKeys)) == numel(gofKeys), ...
     'unit_table_gof has duplicate %s Date-ROI session keys.', monkeyName);
 
 rowIndices = nan(numel(gofKeys), 1);
+usedDateOnlyFallback = false(numel(gofKeys), 1);
 for i = 1:numel(gofKeys)
     matches = find(workbookKeys == gofKeys(i));
+    if isempty(matches)
+        matches = find(workbookDates == gofDates(i) & ...
+            ismember(workbookROI, ["MT", "FST"]));
+        usedDateOnlyFallback(i) = numel(matches) == 1;
+    end
     assert(numel(matches) == 1, ...
-        'Expected one workbook match for %s %s, but found %d.', ...
+        ['Expected one exact Date-ROI match or one unique date fallback ' ...
+        'for %s %s, but found %d.'], ...
         monkeyName, gofKeys(i), numel(matches));
     rowIndices(i) = matches;
 end
-rowIndices = sort(rowIndices);
+assert(numel(unique(rowIndices)) == numel(rowIndices), ...
+    '%s analysis sessions mapped to duplicate workbook rows.', monkeyName);
+[rowIndices, sortOrder] = sort(rowIndices);
+analysisROI = gofROI(sortOrder);
+analysisDates = gofDates(sortOrder);
+usedDateOnlyFallback = usedDateOnlyFallback(sortOrder);
 
 audit = struct();
 audit.Monkey = monkeyName;
 audit.SessionCount = numel(rowIndices);
-audit.MTCount = nnz(workbookROI(rowIndices) == "MT");
-audit.FSTCount = nnz(workbookROI(rowIndices) == "FST");
-audit.Keys = gofKeys;
+audit.MTCount = nnz(analysisROI == "MT");
+audit.FSTCount = nnz(analysisROI == "FST");
+audit.Keys = gofKeys(sortOrder);
+audit.AnalysisROI = analysisROI;
+audit.AnalysisDates = analysisDates;
+audit.WorkbookROI = workbookROI(rowIndices);
+audit.UsedDateOnlyFallback = usedDateOnlyFallback;
 end
 
 function column = getTableColumnLocal(tb, requested_name)

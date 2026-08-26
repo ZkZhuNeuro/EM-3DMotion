@@ -9,11 +9,13 @@ function [SessionSummary, ChannelCorrelations, AnalysisMetadata, Figures] = ...
 % tuning from the 3DMotionStim task with every channel's tuning from the
 % 3DMotionQuick task.
 %
-% Only coherence values present in both tasks are used. Within every cue,
-% the mean firing-rate curve is z-scored across the shared coherence grid.
-% The primary Pearson correlation pools those cue-wise z-scores. Thus the
-% result tests tuning-shape agreement without allowing firing-rate scale or
-% cue-specific baselines to determine the winning channel. A channel is
+% Only the first four and last four Stim coherence columns, and their
+% matching Quick values, are used. Each channel is z-scored once across its
+% complete cue-by-coherence matrix, preserving the
+% relative firing rates among cues. The primary Pearson correlation pools
+% all of those values. Thus the result tests agreement in both within-cue
+% tuning shape and between-cue firing-rate structure without allowing the
+% overall firing-rate scale to determine the winning channel. A channel is
 % ranked only if it has every finite value available in the Stim reference.
 %
 % Default outputs are written to:
@@ -22,7 +24,9 @@ function [SessionSummary, ChannelCorrelations, AnalysisMetadata, Figures] = ...
 % SessionSummary contains the winning Quick channel for each session.
 % ChannelCorrelations contains all channel correlations and cue-specific
 % correlations, with acquisition channel, physical probe position, and
-% distance from the stimulation electrode retained for auditing.
+% distance from the stimulation electrode retained for auditing. By
+% default, only channels within four physical probe positions (200 um) of
+% the stimulation electrode are eligible to win.
 
 arguments
     stateFile (1, 1) string = ...
@@ -32,6 +36,8 @@ arguments
     options.SaveOutputs (1, 1) logical = true
     options.MakePlot (1, 1) logical = true
     options.FigureVisible (1, 1) logical = false
+    options.MaxAbsRelativePosition (1, 1) double ...
+        {mustBeNonnegative, mustBeInteger} = 4
 end
 
 if ~isfile(stateFile)
@@ -66,7 +72,8 @@ rowCount = height(unitTable);
 sessionRows = cell(rowCount, 1);
 channelRows = cell(rowCount, 1);
 for row = 1:rowCount
-    [sessionRows{row}, channelRows{row}] = correlateSession(unitTable, row);
+    [sessionRows{row}, channelRows{row}] = correlateSession( ...
+        unitTable, row, options.MaxAbsRelativePosition);
 end
 SessionSummary = vertcat(sessionRows{:});
 ChannelCorrelations = vertcat(channelRows{:});
@@ -77,13 +84,21 @@ AnalysisMetadata.Analysis = ...
 AnalysisMetadata.InputFile = stateFile;
 AnalysisMetadata.CreatedAt = datetime('now', 'TimeZone', 'UTC');
 AnalysisMetadata.SharedGridRule = ...
-    "Intersection of rounded (2 decimal) Quick and Stim coherence values";
+    "First four and last four Stim coherence columns, matched to Quick: " + ...
+    "[-1 -0.64 -0.45 -0.36 0.36 0.45 0.64 1]";
 AnalysisMetadata.Normalization = ...
-    "Each cue z-scored across shared coherence with sample SD (N-1)";
+    "Each channel z-scored once across the complete shared cue-by-" + ...
+    "coherence matrix with sample SD (N-1); cue relationships retained";
 AnalysisMetadata.PrimaryMetric = ...
-    "Pearson r pooled across all finite cue-wise z-scored values";
+    "Pearson r pooled across all finite whole-channel z-scored values";
 AnalysisMetadata.Ranking = ...
-    "Descending Pearson r; complete channels only; channel breaks ties";
+    "Descending Pearson r; complete channels within the distance limit; " + ...
+    "channel breaks ties";
+AnalysisMetadata.ContactSpacingMicrometers = 50;
+AnalysisMetadata.MaxAbsRelativePosition = ...
+    options.MaxAbsRelativePosition;
+AnalysisMetadata.MaxDistanceMicrometers = ...
+    50 .* options.MaxAbsRelativePosition;
 AnalysisMetadata.InputPipelineMetadata = struct();
 if isfield(loaded, 'PipelineMetadata')
     AnalysisMetadata.InputPipelineMetadata = loaded.PipelineMetadata;
@@ -147,7 +162,8 @@ fprintf(['Correlated %d/%d sessions successfully. ' ...
 end
 
 
-function [sessionResult, channelResult] = correlateSession(unitTable, row)
+function [sessionResult, channelResult] = correlateSession( ...
+    unitTable, row, maxAbsRelativePosition)
 monkey = getRowText(unitTable.Monkey, row);
 recordingDate = unitTable.Date(row);
 stimChannel = getRowScalar(unitTable.StimElec, row);
@@ -156,7 +172,7 @@ sourceStatus = string(unitTable.stim_tuning_status(row));
 
 sessionResult = makeEmptySessionRow( ...
     row, monkey, recordingDate, stimChannel, declaredChannelCount, ...
-    sourceStatus);
+    sourceStatus, maxAbsRelativePosition);
 channelResult = table();
 if ~startsWith(sourceStatus, "Success")
     sessionResult.Status = "SkippedInputStatus";
@@ -212,23 +228,30 @@ try
         error('QuickStimCorrelation:StimCoherenceSizeMismatch', ...
             'Stim coherence axis and tuning array have different sizes.');
     end
-    [isShared, stimColumns] = ismember( ...
-        round(quickCoherence, 2), round(stimCoherence, 2));
+    if numel(stimCoherence) < 8
+        error('QuickStimCorrelation:InsufficientStimCoherence', ...
+            'Stim tuning has only %d coherence columns; at least 8 required.', ...
+            numel(stimCoherence));
+    end
+    stimAnalysisColumns = [1:4, numel(stimCoherence)-3:numel(stimCoherence)];
+    stimAnalysisCoherence = stimCoherence(stimAnalysisColumns);
+    [isShared, selectedStimColumns] = ismember( ...
+        round(quickCoherence, 2), round(stimAnalysisCoherence, 2));
     quickColumns = 1:numel(isShared);
     quickColumns = quickColumns(isShared);
-    stimColumns = stimColumns(isShared);
+    stimColumns = stimAnalysisColumns(selectedStimColumns(isShared));
     sharedCoherence = quickCoherence(isShared);
-    if numel(sharedCoherence) < 3
-        error('QuickStimCorrelation:InsufficientSharedCoherence', ...
-            'Only %d shared coherence values were found.', ...
+    if numel(sharedCoherence) ~= 8
+        error('QuickStimCorrelation:OuterCoherenceMismatch', ...
+            'Expected 8 matching outer coherence values but found %d.', ...
             numel(sharedCoherence));
     end
 
     quickShared = quickMean(:, quickColumns, :);
     stimReference = reshape(stimMeanAll( ...
         :, stimColumns, stimChannel), cueCount, []);
-    quickZ = zScoreEachCue(quickShared);
-    stimZ = zScoreEachCue(stimReference);
+    quickZ = zScoreWholeChannel(quickShared);
+    stimZ = zScoreWholeChannel(stimReference);
     referenceMask = isfinite(stimZ);
     referenceValueCount = nnz(referenceMask);
     if referenceValueCount < 3
@@ -272,10 +295,26 @@ try
     end
 
     rank = nan(channelCount, 1);
-    rankable = find(isComplete & isfinite(pearsonR));
+    unconstrainedRank = nan(channelCount, 1);
+    isWithinDistanceThreshold = ...
+        abs(relativePosition) <= maxAbsRelativePosition;
+    isEligibleForRanking = isComplete & isfinite(pearsonR) & ...
+        isWithinDistanceThreshold;
+    unconstrainedRankable = find(isComplete & isfinite(pearsonR));
+    unconstrainedRankingTable = table(unconstrainedRankable, ...
+        pearsonR(unconstrainedRankable), ...
+        'VariableNames', {'Channel', 'PearsonR'});
+    unconstrainedRankingTable = sortrows(unconstrainedRankingTable, ...
+        {'PearsonR', 'Channel'}, {'descend', 'ascend'});
+    unconstrainedRank(unconstrainedRankingTable.Channel) = ...
+        (1:height(unconstrainedRankingTable))';
+    unconstrainedBestChannel = unconstrainedRankingTable.Channel(1);
+
+    rankable = find(isEligibleForRanking);
     if isempty(rankable)
         error('QuickStimCorrelation:NoRankableChannels', ...
-            'No Quick channel has a complete, nonconstant tuning vector.');
+            ['No Quick channel within %d probe positions has a complete, ' ...
+            'nonconstant tuning vector.'], maxAbsRelativePosition);
     end
     rankingTable = table(rankable, pearsonR(rankable), ...
         'VariableNames', {'Channel', 'PearsonR'});
@@ -284,6 +323,7 @@ try
     rank(rankingTable.Channel) = (1:height(rankingTable))';
     bestChannel = rankingTable.Channel(1);
     isBest = channel == bestChannel;
+    isUnconstrainedBest = channel == unconstrainedBestChannel;
     isStimChannel = channel == stimChannel;
 
     unitTableRow = repmat(row, channelCount, 1);
@@ -298,13 +338,17 @@ try
         stimChannelColumn, channel, probePosition, relativePosition, ...
         distanceMicrometers, sharedCoherenceCount, ...
         referenceCountColumn, pairedValueCount, isComplete, pearsonR, ...
-        pearsonP, rawPearsonR, rank, isBest, isStimChannel, ...
+        pearsonP, rawPearsonR, isWithinDistanceThreshold, ...
+        isEligibleForRanking, rank, unconstrainedRank, isBest, ...
+        isUnconstrainedBest, isStimChannel, ...
         'VariableNames', {'UnitTableRow', 'Monkey', 'Date', ...
         'StimChannel', 'QuickChannel', 'ProbePosition', ...
         'RelativePositionToStim', 'DistanceToStimMicrometers', ...
         'SharedCoherenceCount', 'ReferenceValueCount', ...
         'PairedValueCount', 'IsComplete', 'PearsonR', 'PearsonP', ...
-        'RawPearsonR', 'Rank', 'IsBest', 'IsStimChannel'});
+        'RawPearsonR', 'IsWithinDistanceThreshold', ...
+        'IsEligibleForRanking', 'Rank', 'UnconstrainedRank', 'IsBest', ...
+        'IsUnconstrainedBest', 'IsStimChannel'});
     cueVariableNames = matlab.lang.makeUniqueStrings( ...
         "PearsonR_" + matlab.lang.makeValidName(conditionNames));
     for cue = 1:cueCount
@@ -318,6 +362,7 @@ try
     sessionResult.SharedCoherence = {sharedCoherence};
     sessionResult.ReferenceValueCount = referenceValueCount;
     sessionResult.CompleteChannelCount = nnz(isComplete);
+    sessionResult.EligibleChannelCount = nnz(isEligibleForRanking);
     sessionResult.BestChannel = bestChannel;
     sessionResult.BestProbePosition = probePosition(bestChannel);
     sessionResult.BestRelativePositionToStim = ...
@@ -326,6 +371,17 @@ try
         distanceMicrometers(bestChannel);
     sessionResult.BestPearsonR = pearsonR(bestChannel);
     sessionResult.BestPearsonP = pearsonP(bestChannel);
+    sessionResult.BestAtDistanceBoundary = ...
+        abs(relativePosition(bestChannel)) == maxAbsRelativePosition;
+    sessionResult.UnconstrainedBestChannel = unconstrainedBestChannel;
+    sessionResult.UnconstrainedBestRelativePositionToStim = ...
+        relativePosition(unconstrainedBestChannel);
+    sessionResult.UnconstrainedBestDistanceToStimMicrometers = ...
+        distanceMicrometers(unconstrainedBestChannel);
+    sessionResult.UnconstrainedBestPearsonR = ...
+        pearsonR(unconstrainedBestChannel);
+    sessionResult.SelectionChangedByDistanceThreshold = ...
+        bestChannel ~= unconstrainedBestChannel;
     sessionResult.StimChannelPearsonR = stimQuickR;
     sessionResult.StimChannelRank = rank(stimChannel);
     sessionResult.StimChannelIsBest = bestChannel == stimChannel;
@@ -338,18 +394,26 @@ end
 
 
 function rowTable = makeEmptySessionRow( ...
-    row, monkey, recordingDate, stimChannel, channelCount, sourceStatus)
+    row, monkey, recordingDate, stimChannel, channelCount, sourceStatus, ...
+    maxAbsRelativePosition)
 unitTableRow = row;
 sharedCoherenceCount = 0;
 sharedCoherence = {zeros(1, 0)};
 referenceValueCount = 0;
 completeChannelCount = 0;
+eligibleChannelCount = 0;
 bestChannel = NaN;
 bestProbePosition = NaN;
 bestRelativePositionToStim = NaN;
 bestDistanceToStimMicrometers = NaN;
 bestPearsonR = NaN;
 bestPearsonP = NaN;
+bestAtDistanceBoundary = false;
+unconstrainedBestChannel = NaN;
+unconstrainedBestRelativePositionToStim = NaN;
+unconstrainedBestDistanceToStimMicrometers = NaN;
+unconstrainedBestPearsonR = NaN;
+selectionChangedByDistanceThreshold = false;
 stimChannelPearsonR = NaN;
 stimChannelRank = NaN;
 stimChannelIsBest = false;
@@ -357,16 +421,28 @@ status = "Pending";
 message = "";
 rowTable = table(unitTableRow, monkey, recordingDate, stimChannel, ...
     channelCount, sourceStatus, sharedCoherenceCount, sharedCoherence, ...
-    referenceValueCount, completeChannelCount, bestChannel, ...
+    referenceValueCount, completeChannelCount, eligibleChannelCount, ...
+    maxAbsRelativePosition, 50 .* maxAbsRelativePosition, bestChannel, ...
     bestProbePosition, bestRelativePositionToStim, ...
     bestDistanceToStimMicrometers, bestPearsonR, bestPearsonP, ...
+    bestAtDistanceBoundary, unconstrainedBestChannel, ...
+    unconstrainedBestRelativePositionToStim, ...
+    unconstrainedBestDistanceToStimMicrometers, ...
+    unconstrainedBestPearsonR, selectionChangedByDistanceThreshold, ...
     stimChannelPearsonR, stimChannelRank, stimChannelIsBest, status, ...
     message, 'VariableNames', {'UnitTableRow', 'Monkey', 'Date', ...
     'StimChannel', 'ChannelCount', 'InputStatus', ...
     'SharedCoherenceCount', 'SharedCoherence', 'ReferenceValueCount', ...
-    'CompleteChannelCount', 'BestChannel', 'BestProbePosition', ...
+    'CompleteChannelCount', 'EligibleChannelCount', ...
+    'MaxAbsRelativePosition', 'MaxDistanceMicrometers', ...
+    'BestChannel', 'BestProbePosition', ...
     'BestRelativePositionToStim', 'BestDistanceToStimMicrometers', ...
-    'BestPearsonR', 'BestPearsonP', 'StimChannelPearsonR', ...
+    'BestPearsonR', 'BestPearsonP', 'BestAtDistanceBoundary', ...
+    'UnconstrainedBestChannel', ...
+    'UnconstrainedBestRelativePositionToStim', ...
+    'UnconstrainedBestDistanceToStimMicrometers', ...
+    'UnconstrainedBestPearsonR', ...
+    'SelectionChangedByDistanceThreshold', 'StimChannelPearsonR', ...
     'StimChannelRank', 'StimChannelIsBest', 'Status', 'Message'});
 end
 
@@ -431,20 +507,21 @@ coherence = numerator ./ 22;
 end
 
 
-function zValues = zScoreEachCue(meanValues)
+function zValues = zScoreWholeChannel(meanValues)
 zValues = nan(size(meanValues));
 for channel = 1:size(meanValues, 3)
-    for cue = 1:size(meanValues, 1)
-        values = reshape(meanValues(cue, :, channel), 1, []);
-        finiteMask = isfinite(values);
-        if nnz(finiteMask) < 2
-            continue
-        end
-        scale = std(values(finiteMask), 0);
-        if isfinite(scale) && scale > 0
-            zValues(cue, finiteMask, channel) = ...
-                (values(finiteMask) - mean(values(finiteMask))) ./ scale;
-        end
+    values = reshape(meanValues(:, :, channel), [], 1);
+    finiteMask = isfinite(values);
+    if nnz(finiteMask) < 2
+        continue
+    end
+    scale = std(values(finiteMask), 0);
+    if isfinite(scale) && scale > 0
+        standardized = nan(size(values));
+        standardized(finiteMask) = ...
+            (values(finiteMask) - mean(values(finiteMask))) ./ scale;
+        zValues(:, :, channel) = reshape(standardized, ...
+            size(meanValues, 1), size(meanValues, 2));
     end
 end
 end
@@ -519,8 +596,7 @@ title(axesHandle, 'Stim electrode versus winning channel');
 grid(axesHandle, 'on');
 
 axesHandle = nexttile(layout);
-rankable = channelCorrelations.IsComplete & ...
-    isfinite(channelCorrelations.PearsonR);
+rankable = channelCorrelations.IsEligibleForRanking;
 boxchart(axesHandle, ...
     categorical(channelCorrelations.RelativePositionToStim(rankable)), ...
     channelCorrelations.PearsonR(rankable), ...
@@ -576,7 +652,8 @@ for monkeyIndex = 1:numel(monkeys)
         'LineWidth', 0.35, 'DisplayName', monkeys(monkeyIndex));
 end
 xline(axesHandle, 0, '--', 'Stim electrode', ...
-    'Color', [0.25 0.25 0.25], 'LabelVerticalAlignment', 'bottom');
+    'Color', [0.25 0.25 0.25], 'LabelVerticalAlignment', 'bottom', ...
+    'HandleVisibility', 'off');
 xticks(axesHandle, positions);
 xlim(axesHandle, [positions(1) - 0.6, positions(end) + 0.6]);
 ylim(axesHandle, [0 1]);

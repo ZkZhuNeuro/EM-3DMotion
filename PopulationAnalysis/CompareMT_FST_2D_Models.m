@@ -177,11 +177,8 @@ end
 function bias_table = apply_selection_rules_across_roi(bias_table, monkey)
 switch monkey
     case 'Both'
-        is_fst = strcmp(bias_table.Area, "FST");
-        is_clay = strcmp(bias_table.Monkey, "Clay");
-        is_jim = strcmp(bias_table.Monkey, "Jim");
-        keep_rows = ~is_fst | is_clay | (is_jim & bias_table.AP <= 26);
-        bias_table = bias_table(keep_rows, :);
+        % ROI labels define the cohorts. Do not apply experiment-specific
+        % anatomical cutoffs to Jim FST sessions.
     case 'Jim'
         bias_table = bias_table(strcmp(bias_table.Monkey, "Jim"), :);
     case 'Clay'

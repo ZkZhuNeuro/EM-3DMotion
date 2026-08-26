@@ -17,6 +17,8 @@ arguments
         mustBeGreaterThan(options.NumFolds, 1)} = 5
     options.RandomSeed (1, 1) double {mustBeInteger, mustBeNonnegative} = 1
     options.SigmaValues (1, :) double = logspace(-2, 2, 41)
+    options.ExcludedOriginalRows (:, 1) double ...
+        {mustBeInteger, mustBePositive} = zeros(0, 1)
 end
 
 sigmaValues = sort(unique(options.SigmaValues(:)));
@@ -28,6 +30,14 @@ end
 unitData = load(paths.unitTableGof, 'unit_table_gof');
 unitTableAll = unitData.unit_table_gof;
 [selection, behavior] = selectJimMT2DCombinedCue(unitTableAll);
+baseSelection = selection;
+excludedOriginalRows = unique(options.ExcludedOriginalRows(:));
+excludedOriginalRows = excludedOriginalRows( ...
+    excludedOriginalRows <= height(unitTableAll));
+selection(excludedOriginalRows) = false;
+behaviorAllSelected = nan(height(unitTableAll), 1);
+behaviorAllSelected(baseSelection) = behavior;
+behavior = behaviorAllSelected(selection);
 unitTable = unitTableAll(selection, :);
 
 channelMap = [8 6 4 2 7 5 3 1 15 13 11 9 16 14 12 10];
@@ -119,7 +129,10 @@ result.sourceTable = string(paths.unitTableGof);
 result.behaviorField = "Behav_bias_NminusS{row}(1)";
 result.selectionRule = ["Jim"; "MT"; "ND = 2D"; ...
     "combined-cue Behav_goodfit_both"; ...
-    "finite combined-cue Behav_bias_NminusS"];
+    "finite combined-cue Behav_bias_NminusS"; ...
+    "optional original-table row exclusion applied before fitting"];
+result.baseOriginalRowIndex = find(baseSelection);
+result.excludedOriginalRows = excludedOriginalRows;
 result.originalRowIndex = find(selection);
 result.sessionCount = height(unitTable);
 result.behavior = behavior;

@@ -23,9 +23,12 @@ stimMean(:, :, 3) = reference - 3;
 
 quickMean = nan(4, 12, 3);
 quickMean(:, :, 1) = fliplr(reference(:, quickColumns));
-quickMean(:, :, 2) = reference(:, quickColumns) + ...
-    [1 -2 3 -1 2 -3 1 -2 3 -1 2 -3];
-quickMean(:, :, 3) = 4 .* reference(:, quickColumns) + [10; -5; 7; 2];
+% Channel 2 has perfect within-cue shapes but deliberately incorrect cue
+% offsets. It would tie for first under independent cue-wise z-scoring.
+quickMean(:, :, 2) = 2 .* reference(:, quickColumns) + ...
+    [80; -80; 40; -40];
+% Channel 3 is a single affine transform of the entire tuning matrix.
+quickMean(:, :, 3) = 4 .* reference(:, quickColumns) + 10;
 
 Date = datetime(2024, 4, 16);
 Monkey = "Jim";
@@ -49,14 +52,75 @@ save(stateFile, 'unit_table_stim');
     stateFile, SaveOutputs=false, MakePlot=false);
 
 verifyEqual(testCase, sessions.Status, "Success");
-verifyEqual(testCase, sessions.SharedCoherenceCount, 12);
-verifyEqual(testCase, sessions.ReferenceValueCount, 48);
+verifyEqual(testCase, sessions.SharedCoherenceCount, 8);
+verifyEqual(testCase, sessions.ReferenceValueCount, 32);
 verifyEqual(testCase, sessions.BestChannel, 3);
 verifyEqual(testCase, sessions.BestPearsonR, 1, 'AbsTol', 1e-12);
 verifyEqual(testCase, sessions.BestProbePosition, 3);
 verifyEqual(testCase, sessions.BestRelativePositionToStim, 2);
+verifyEqual(testCase, sessions.MaxAbsRelativePosition, 4);
+verifyEqual(testCase, sessions.MaxDistanceMicrometers, 200);
+verifyTrue(testCase, channels.IsEligibleForRanking( ...
+    channels.QuickChannel == 3));
 verifyEqual(testCase, channels.Rank(channels.QuickChannel == 3), 1);
+verifyLessThan(testCase, ...
+    channels.PearsonR(channels.QuickChannel == 2), 0.9);
+verifyEqual(testCase, channels.PearsonR, channels.RawPearsonR, ...
+    'AbsTol', 1e-12);
 verifyEqual(testCase, height(channels), 3);
+clear cleanup
+end
+
+
+function testDistanceThresholdReplacesDistantUnconstrainedWinner(testCase)
+temporaryDirectory = string(tempname);
+mkdir(temporaryDirectory);
+cleanup = onCleanup(@() rmdir(temporaryDirectory, 's'));
+
+coherence = [-22 -14 -10 -8 8 10 14 22] ./ 22;
+reference = [ ...
+    1:8; 10:17; 4:11; 15:22];
+stimMean = repmat(reference, [1 1 5]);
+quickMean = nan(4, 8, 5);
+quickMean(:, :, 1) = 1;
+quickMean(:, :, 2) = fliplr(reference);
+quickMean(:, :, 3) = flipud(reference);
+quickMean(:, :, 4) = reference + [zeros(3, 8); 0 0 0 0 0 0 0 0.5];
+quickMean(:, :, 5) = 3 .* reference + 7;
+
+Date = datetime(2025, 2, 3);
+Monkey = "Jim";
+StimElec = 3;
+NChannels = 5;
+tuning_mean = {quickMean};
+stim_tuning_mean_noStim = {stimMean};
+stim_tuning_coherence = {coherence};
+stim_tuning_channel_map = {1:5};
+stim_tuning_condition_names = ...
+    {["Combined", "MonoL", "MonoR", "Binocular"]};
+stim_tuning_status = "Success";
+unit_table_stim = table(Date, Monkey, StimElec, NChannels, tuning_mean, ...
+    stim_tuning_mean_noStim, stim_tuning_coherence, ...
+    stim_tuning_channel_map, stim_tuning_condition_names, ...
+    stim_tuning_status);
+stateFile = fullfile(temporaryDirectory, 'unit_table_stim.mat');
+save(stateFile, 'unit_table_stim');
+
+[sessions, channels] = CorrelateQuickStimNoStimTunings( ...
+    stateFile, SaveOutputs=false, MakePlot=false, ...
+    MaxAbsRelativePosition=1);
+
+verifyEqual(testCase, sessions.UnconstrainedBestChannel, 5);
+verifyEqual(testCase, sessions.BestChannel, 4);
+verifyEqual(testCase, sessions.BestDistanceToStimMicrometers, 50);
+verifyTrue(testCase, sessions.BestAtDistanceBoundary);
+verifyTrue(testCase, sessions.SelectionChangedByDistanceThreshold);
+verifyFalse(testCase, channels.IsEligibleForRanking( ...
+    channels.QuickChannel == 5));
+verifyTrue(testCase, isnan(channels.Rank( ...
+    channels.QuickChannel == 5)));
+verifyEqual(testCase, channels.UnconstrainedRank( ...
+    channels.QuickChannel == 5), 1);
 clear cleanup
 end
 

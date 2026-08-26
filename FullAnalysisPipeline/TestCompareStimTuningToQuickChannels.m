@@ -27,13 +27,15 @@ save(stimFile, 'Neuro');
 
 quickMean = nan(4, 8, 3);
 quickMean(:, :, 1) = fliplr(stimMean);
-quickMean(:, :, 2) = 3 .* stimMean + [10; -4; 6; 20];
-quickMean(:, :, 3) = stimMean + [ ...
-    3 -1 2 -2 1 -3 4 -4; ...
-    -2 3 -1 4 -3 1 -4 2; ...
-    4 -2 3 -1 2 -4 1 -3; ...
-    -1 4 -3 2 -4 3 -2 1];
+% Channel 2 is one affine transform of the complete channel matrix.
+quickMean(:, :, 2) = 3 .* stimMean + 10;
+% Channel 3 preserves each cue's shape but adds cue-specific offsets. It
+% would be indistinguishable under cue-wise Z-scoring, but not when the
+% complete channel is standardized once.
+quickMean(:, :, 3) = 3 .* stimMean + [10; -4; 6; 20];
 tuning_mean = {quickMean};
+% Deliberately retain the legacy cue-wise values to prove that scoring is
+% recomputed from tuning_mean instead of consuming this saved array.
 tuning_z = {zscore(quickMean, 0, 2)};
 Monkey = "Jim";
 Date = datetime(2024, 4, 16);
@@ -51,9 +53,16 @@ verifyEqual(testCase, comparison.BestSSE, 0, 'AbsTol', 1e-12);
 verifyEqual(testCase, comparison.ExpectedCellCount, 32);
 verifyEqual(testCase, comparison.ChannelSummaryByChannel.PairedValueCount, ...
     repmat(32, 3, 1));
-verifyLessThan(testCase, ...
-    max(comparison.ChannelSummaryByChannel.StoredZMaxAbsDifference), ...
-    1e-12);
+verifyEqual(testCase, mean(comparison.StimZ, 'all'), 0, ...
+    'AbsTol', 1e-12);
+verifyEqual(testCase, std(comparison.StimZ, 0, 'all'), 1, ...
+    'AbsTol', 1e-12);
+verifyGreaterThan(testCase, ...
+    max(abs(mean(comparison.StimZ, 2))), 0.1);
+verifyGreaterThan(testCase, ...
+    comparison.ChannelSummaryByChannel.StoredZMaxAbsDifference(2), 0.1);
+verifyGreaterThan(testCase, ...
+    comparison.ChannelSummaryByChannel.SSE(3), 0);
 verifyEmpty(testCase, figures.AllChannels);
 clear cleanup
 end

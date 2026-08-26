@@ -35,6 +35,15 @@ means. Per-cell trial counts, cue names, channel map, source filenames,
 fingerprints, eye-check status, extraction counts, errors, and processing
 status are also stored.
 
+Before calculating the curves, trial firing rates are screened independently
+within each electrical-stimulation status x cue x coherence x acquisition
+channel x unit cell. The modified Z-score uses the median and MAD; observations
+with `abs(modifiedZ) > 3.5` are excluded when at least eight finite trials are
+available. Cells with fewer than eight trials or zero MAD are retained without
+statistical exclusion. The `stim_tuning_n_*` cells therefore contain effective
+post-filter counts in cue x coherence x acquisition-channel order, normally
+`4 x 13 x 16`.
+
 `NChannels` in the source table is authoritative. Historical Stim files may
 contain trailing stimulation-monitor rows after the probe MUA rows; the
 builder retains acquisition rows `1:NChannels` consistently in every tuning
@@ -49,12 +58,17 @@ session has a linked file under `TrialFiringRates`, containing one
 `StimTrialFR` struct with:
 
 - `FiringRateHz`: analyzed trial x channel x unit;
+- `FiringRateOutlierMask`: an aligned logical array marking observations
+  excluded from tuning means and SEMs;
+- `OutlierSettings` and `OutlierAudit`: the exact MAD rule and counts;
 - `TrialSummary`: the aligned trial metadata and Stim/NoStim flag;
 - source and extraction provenance; and
 - the coherence axis, cue names, and channel map.
 
-The file does not contain `Neuro.All` or duplicate copies for the three trial
-subsets. The `ElectricalStim` column in `TrialSummary` selects the groups.
+The original firing rates are never overwritten. A cleaned array can be
+reconstructed as `FiringRateHz` with mask locations set to `NaN`. The file does
+not contain `Neuro.All` or duplicate copies for the three trial subsets. The
+`ElectricalStim` column in `TrialSummary` selects the groups.
 
 ## Restart and audit behavior
 
@@ -69,6 +83,12 @@ large table checkpoint, the next run reconstructs all three means, SEMs, and
 counts from that trial file without rereading the recording. Failed or stale
 rows are retried. Use a new output folder or
 `OverwriteOutput=true` when intentionally changing the analysis definition.
+The MAD-filtered result uses a new schema, so an existing pre-filter output in
+the same folder must be rebuilt with:
+
+```matlab
+RunAllUnitTableStimTunings(OverwriteOutput=true);
+```
 
 For v7.3 recordings whose uncompressed `TrialInfo` exceeds 512 MiB, the
 builder reads 64 contiguous trials at a time and stages a temporary slim
@@ -91,14 +111,14 @@ To export the 16-channel tuning figures from the completed table, run:
 PlotUnitTableStimSessionTunings();
 ```
 
-This creates `TuningFigures_16Channels_ZScore` under the analysis folder, with
-separate `NoStim`, `Stim`, and `Merged` subfolders. Each session has one 2-by-8
-PNG per trial group, ordered by physical probe position and labeled by
-acquisition channel. Within each trial group, every cue of each channel is
-Z-scored independently across coherence, matching the existing
-`unit_table_gof.tuning_z` convention. SEM is divided by the same cue- and
-channel-specific standard deviation. All three figures for a session share one
-Z-score axis range. MATLAB `.fig` output is optional:
+This creates `TuningFigures_16Channels_WholeChannelZScore` under the analysis
+folder, with separate `NoStim`, `Stim`, and `Merged` subfolders. Each session
+has one 2-by-8 PNG per trial group, ordered by physical probe position and
+labeled by acquisition channel. Within each trial group, every channel is
+Z-scored once across all valid cue-by-coherence means. Thus, relative firing-
+rate offsets among cues are preserved. SEM is divided by that same channel-
+wide standard deviation. All three figures for a session share one Z-score
+axis range. MATLAB `.fig` output is optional:
 
 ```matlab
 PlotUnitTableStimSessionTunings(SaveFIG=true);

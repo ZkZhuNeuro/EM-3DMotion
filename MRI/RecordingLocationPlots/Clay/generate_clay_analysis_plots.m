@@ -47,7 +47,7 @@ for i = 1:numel(row_indices)
     fig = gobjects(0);
     try
         session_date = recording_dates(row_idx);
-        roi_label = char(roi_values(row_idx));
+        roi_label = char(inclusion_audit.AnalysisROI(i));
         hole = parseNumericVectorLocal(getValueAtRowLocal( ...
             getTableColumnLocal(tb, 'Hole'), row_idx));
         guide_tube_mm = parseScalarDoubleLocal(getValueAtRowLocal( ...

@@ -45,6 +45,41 @@ assert(summary.ZeroCoherenceTrialCount == 1);
 assert(summary.ExcludedTrialCount == 0);
 assert(isequal(TrialSummary.ElectricalStim, [false; false; true; false]));
 
+% Modified-Z/MAD filtering is channel-specific, retains the original FR,
+% and removes the flagged observation only from tuning summaries.
+channelOneCounts = [45 47 49 50 51 53 55 48 300];
+channelTwoCounts = [30 31 32 33 34 35 36 37 38];
+OutlierTrialInfo = repmat(makeCountTrial( ...
+    0, channelOneCounts(1), channelTwoCounts(1)), 1, 9);
+for trialIndex = 1:9
+    OutlierTrialInfo(trialIndex) = makeCountTrial( ...
+        10 * (trialIndex - 1), channelOneCounts(trialIndex), ...
+        channelTwoCounts(trialIndex));
+end
+outlierTInfoName = 'Synthetic_02Jan2024_3DMotionStim_MUA_TInfo.mat';
+outlierSelName = 'Synthetic_02Jan2024_3DMotionStim_MUA_SelIndex.mat';
+TrialInfo = OutlierTrialInfo; %#ok<NASGU>
+save(fullfile(testFolder, outlierTInfoName), 'TrialInfo', 'Config');
+EditSel = ones(1, numel(TrialInfo)); %#ok<NASGU>
+save(fullfile(testFolder, outlierSelName), 'EditSel', 'Config');
+[outlierNeuro, outlierTrials, outlierSummary] = ...
+    Extract3DMotionStimTuning( ...
+    testFolder, {outlierTInfoName, outlierSelName}, ...
+    ApplyEyeCheck=false, ProgressInterval=0, ...
+    FROutlierMinimumTrials=8, FROutlierThreshold=3.5);
+positiveIndex = find(outlierNeuro.Coherence == 0.36, 1);
+assert(outlierNeuro.Trials.NumTrials(1, positiveIndex) == 9);
+assert(outlierNeuro.Trials.ValidNumTrials(1, positiveIndex, 1, 1) == 8);
+assert(outlierNeuro.Trials.OutlierCount(1, positiveIndex, 1, 1) == 1);
+assert(abs(outlierNeuro.Means(1, positiveIndex, 1, 1) - 49.75) < 1e-12);
+assert(outlierNeuro.TrialFiringRate(9, 1, 1) == 300);
+assert(outlierNeuro.FiringRateOutlierMask(9, 1, 1));
+assert(~outlierNeuro.FiringRateOutlierMask(9, 2, 1));
+assert(outlierTrials.HasFROutlier(9));
+assert(outlierTrials.FROutlierObservationCount(9) == 1);
+assert(outlierSummary.FROutlierObservationCount == 1);
+assert(outlierSummary.FROutlierTrialCount == 1);
+
 % The authoritative YYYYMMDD folder must override a copied date embedded in
 % a filename, and the legacy 20-May-2022 eye-check exception must be kept.
 legacySkipFolder = fullfile(testFolder, '20220520');
@@ -80,4 +115,18 @@ trial = struct( ...
     'StartTimeStamp', startTime, ...
     'EventT', eventTimes, ...
     'EID', events);
+end
+
+
+function trial = makeCountTrial(startTime, channelOneCount, channelTwoCount)
+events = [111 2001 4002 13636 8001 118 130 6001 112];
+eventTimes = startTime + [0 0.1 0.2 0.3 0.4 1 2 2.2 3];
+maxSpikes = max(channelOneCount, channelTwoCount);
+unitT = nan(2, 1, maxSpikes);
+unitT(1, 1, 1:channelOneCount) = linspace( ...
+    startTime + 1.001, startTime + 1.999, channelOneCount);
+unitT(2, 1, 1:channelTwoCount) = linspace( ...
+    startTime + 1.001, startTime + 1.999, channelTwoCount);
+trial = struct('UnitT', unitT, 'StartTimeStamp', startTime, ...
+    'EventT', eventTimes, 'EID', events);
 end
