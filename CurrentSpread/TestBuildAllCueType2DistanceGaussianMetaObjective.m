@@ -4,10 +4,19 @@ tests = functiontests(localfunctions);
 end
 
 
+function setupOnce(~)
+projectFolder = fileparts(mfilename('fullpath'));
+interactiveFolder = fullfile(projectFolder, '02_gaussian', ...
+    'interactive_population');
+addpath(fullfile(interactiveFolder, 'common'), ...
+    fullfile(interactiveFolder, 'type2_distance'));
+end
+
+
 function testCueWiseMeansAndOrthogonalDistance(testCase)
 testFolder = string(tempname);
 mkdir(testFolder);
-cleanup = onCleanup(@() removeTestFolder(testFolder)); %#ok<NASGU>
+cleanup = onCleanup(@() removeTestFolder(testFolder));
 cacheFile = fullfile(testFolder, 'synthetic_cache.mat');
 outputFolder = fullfile(testFolder, 'output');
 

@@ -132,8 +132,9 @@ for area = areas
                 continue
             end
 
+            stableIndex = stableGroupIndex(area, unitType, condition);
             foldMatrix = repeatedBalancedFolds(group.N, options.NumFolds, ...
-                options.NumRepeats, options.RandomSeed + 1000 * groupIndex);
+                options.NumRepeats, options.RandomSeed + 1000 * stableIndex);
             group.FoldMatrix = foldMatrix;
             augmentedParameterCount = size(x, 2) + 1;
             minimumTrainingCount = minimumTrainingRows(foldMatrix);
@@ -315,6 +316,18 @@ for repeatIndex = 1:size(foldMatrix, 2)
         minimumCount = min(minimumCount, nnz(folds ~= foldLabel));
     end
 end
+end
+
+
+function index = stableGroupIndex(area, unitType, condition)
+canonicalAreas = ["MT", "FST"];
+canonicalUnitTypes = ["2D", "3D"];
+canonicalConditions = ["Dominant", "Combined", "Stereo", "NonDominant"];
+areaIndex = find(canonicalAreas == area, 1);
+unitTypeIndex = find(canonicalUnitTypes == unitType, 1);
+conditionIndex = find(canonicalConditions == condition, 1);
+index = ((areaIndex - 1) * numel(canonicalUnitTypes) + ...
+    (unitTypeIndex - 1)) * numel(canonicalConditions) + conditionIndex;
 end
 
 

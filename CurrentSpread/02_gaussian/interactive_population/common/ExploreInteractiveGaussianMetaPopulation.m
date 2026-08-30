@@ -13,6 +13,8 @@ arguments
         "InteractiveGaussianMetaPopulation\" + ...
         "GaussianMetaPopulationSigmaCache.mat"]
     options.InitialSigma (1, 1) double = NaN
+    options.UnitType (1, 1) string ...
+        {mustBeMember(options.UnitType, ["2D", "3D"])} = "2D"
     options.MetricMode (1, 1) string ...
         {mustBeMember(options.MetricMode, ...
         ["PerCueR2", "SumFourCueR2", ...
@@ -23,9 +25,12 @@ arguments
     options.MetricPerCueR2 double = []
     options.SumFourCueR2 double = []
     options.ObjectiveLabel (1, 1) string = "Sum of four cue R^2"
-    options.MarkerEdgeAlpha (1, 1) double ...
-        {mustBeGreaterThanOrEqual(options.MarkerEdgeAlpha, 0), ...
-        mustBeLessThanOrEqual(options.MarkerEdgeAlpha, 1)} = 0.85
+    options.MarkerEdgeAlpha (1, 1) double = NaN
+    options.MarkerFaceAlphaFloor (1, 1) double = NaN
+    options.MarkerFaceAlphaCeiling (1, 1) double ...
+        {mustBeGreaterThanOrEqual(options.MarkerFaceAlphaCeiling, 0), ...
+        mustBeLessThanOrEqual(options.MarkerFaceAlphaCeiling, 1)} = 1
+    options.ReserveSelectionRow (1, 1) logical = false
     options.Visible (1, 1) string ...
         {mustBeMember(options.Visible, ["on", "off"])} = "on"
     options.Position (1, 4) double = [60 60 1540 900]
@@ -44,6 +49,38 @@ if ~isfield(loaded, 'cache')
 end
 cache = loaded.cache;
 validateCache(cache);
+isCorrelationOD = isfield(cache, 'ODDefinition') && ...
+    string(cache.ODDefinition) == "Correlation";
+if isnan(options.MarkerFaceAlphaFloor)
+    options.MarkerFaceAlphaFloor = 0;
+end
+if isnan(options.MarkerEdgeAlpha)
+    if isCorrelationOD
+        options.MarkerEdgeAlpha = 0.95;
+    else
+        options.MarkerEdgeAlpha = 0.85;
+    end
+end
+if options.MarkerFaceAlphaFloor < 0 || ...
+        options.MarkerFaceAlphaFloor > 1 || ...
+        options.MarkerEdgeAlpha < 0 || options.MarkerEdgeAlpha > 1
+    error('GaussianMetaInteractive:MarkerAlphaRange', ...
+        'Marker alpha values must be between zero and one.');
+end
+if options.MarkerFaceAlphaFloor > options.MarkerFaceAlphaCeiling
+    error('GaussianMetaInteractive:MarkerAlphaRange', ...
+        'MarkerFaceAlphaFloor cannot exceed MarkerFaceAlphaCeiling.');
+end
+selected = selectGaussianMetaUnitTypeData(cache, options.UnitType);
+pointValid = selected.PointValid;
+statistics = selected.Statistics;
+areaName = selected.Area;
+if isfield(cache, 'ODDefinition')
+    odDefinition = string(cache.ODDefinition);
+else
+    odDefinition = "Max";
+end
+odLabel = odDefinition + " OD";
 
 sigmaValues = double(cache.SigmaValues(:));
 numSigmas = numel(sigmaValues);
@@ -56,7 +93,7 @@ isDistanceMode = ...
     options.MetricMode == "SumFourCueMeanSquaredDistance";
 isInteractionR2Mode = options.MetricMode == "SumFourCueR2" || ...
     options.MetricMode == "SumFourCueOrdinaryR2";
-metricPerCue = double(cache.Statistics.R2_AI);
+metricPerCue = double(statistics.R2_AI);
 if isObjectiveMode && ~isempty(options.MetricPerCue)
     if ~isequal(size(options.MetricPerCue), [4 numSigmas])
         error('GaussianMetaInteractive:InvalidMetricPerCue', ...
@@ -112,19 +149,30 @@ else
 end
 [~, initialIndex] = min(abs(sigmaValues - initialSigma));
 
-figureName = 'MT 2D Gaussian-meta population explorer';
+figureName = sprintf('%s %s Gaussian-meta population explorer (%s)', ...
+    areaName, options.UnitType, odLabel);
 if options.MetricMode == "SumFourCueR2"
-    figureName = 'MT 2D all-cue summed-R2 Gaussian-meta explorer';
+    figureName = sprintf( ...
+        '%s %s all-cue summed-R2 Gaussian-meta explorer (%s)', ...
+        areaName, options.UnitType, odLabel);
 elseif options.MetricMode == "SumFourCueOrdinaryR2"
-    figureName = 'MT 2D all-cue ordinary-R2 Gaussian-meta explorer';
+    figureName = sprintf( ...
+        '%s %s all-cue ordinary-R2 Gaussian-meta explorer (%s)', ...
+        areaName, options.UnitType, odLabel);
 elseif isDistanceMode
-    figureName = 'MT 2D all-cue Type II distance Gaussian-meta explorer';
+    figureName = sprintf( ...
+        '%s %s all-cue Type II distance Gaussian-meta explorer (%s)', ...
+        areaName, options.UnitType, odLabel);
 end
 figureHandle = uifigure('Name', figureName, ...
     'Color', 'w', 'Visible', char(options.Visible), ...
     'Position', options.Position);
 mainGrid = uigridlayout(figureHandle, [2 2]);
-mainGrid.RowHeight = {'1x', 108};
+if options.ReserveSelectionRow
+    mainGrid.RowHeight = {'1x', 142};
+else
+    mainGrid.RowHeight = {'1x', 108};
+end
 mainGrid.ColumnWidth = {'3x', '1.15x'};
 mainGrid.Padding = [14 12 14 10];
 mainGrid.RowSpacing = 10;
@@ -200,10 +248,19 @@ statisticsArea = uitextarea(rightGrid, 'Editable', 'off', ...
     'FontName', 'Consolas', 'FontSize', 12, ...
     'BackgroundColor', [0.98 0.98 0.98]);
 
-controlGrid = uigridlayout(mainGrid, [2 4]);
+if options.ReserveSelectionRow
+    controlGrid = uigridlayout(mainGrid, [3 4]);
+    controlGrid.RowHeight = {28, 30, 48};
+    labelRow = 2;
+    sliderRow = 3;
+else
+    controlGrid = uigridlayout(mainGrid, [2 4]);
+    controlGrid.RowHeight = {30, 48};
+    labelRow = 1;
+    sliderRow = 2;
+end
 controlGrid.Layout.Row = 2;
 controlGrid.Layout.Column = [1 2];
-controlGrid.RowHeight = {30, 48};
 controlGrid.ColumnWidth = {155, '1x', 145, 170};
 controlGrid.Padding = [0 0 0 0];
 controlGrid.RowSpacing = 3;
@@ -211,24 +268,24 @@ controlGrid.RowSpacing = 3;
 sigmaLabel = uilabel(controlGrid, 'Text', 'Gaussian sigma', ...
     'FontWeight', 'bold', 'FontSize', 13, ...
     'HorizontalAlignment', 'right');
-sigmaLabel.Layout.Row = 1;
+sigmaLabel.Layout.Row = labelRow;
 sigmaLabel.Layout.Column = 1;
 currentSigmaLabel = uilabel(controlGrid, 'Text', '', ...
     'FontWeight', 'bold', 'FontSize', 14);
-currentSigmaLabel.Layout.Row = 1;
+currentSigmaLabel.Layout.Row = labelRow;
 currentSigmaLabel.Layout.Column = 2;
 indexLabel = uilabel(controlGrid, 'Text', '', ...
     'HorizontalAlignment', 'right');
-indexLabel.Layout.Row = 1;
+indexLabel.Layout.Row = labelRow;
 indexLabel.Layout.Column = 3;
 countLabel = uilabel(controlGrid, 'Text', '', ...
     'HorizontalAlignment', 'right');
-countLabel.Layout.Row = 1;
+countLabel.Layout.Row = labelRow;
 countLabel.Layout.Column = 4;
 
 slider = uislider(controlGrid, 'Limits', [1 numSigmas], ...
     'Value', initialIndex);
-slider.Layout.Row = 2;
+slider.Layout.Row = sliderRow;
 slider.Layout.Column = [1 4];
 tickIndices = unique(round(linspace(1, numSigmas, 9)));
 slider.MajorTicks = tickIndices;
@@ -275,7 +332,10 @@ app.PopulationAxes = populationAxes;
 app.WeightAxes = weightAxes;
 app.MetricAxes = metricAxes;
 app.Slider = slider;
+app.ControlGrid = controlGrid;
 app.CacheFile = options.CacheFile;
+app.Area = areaName;
+app.UnitType = options.UnitType;
 app.MetricMode = options.MetricMode;
 app.ObjectiveValues = objectiveValues;
 app.MetricPerCue = metricPerCue;
@@ -296,17 +356,23 @@ app.AllCueOptimalCursor = optimalCursor;
         od = double(cache.PointOD(:, index));
         for displayCondition = 1:4
             for displayMonkey = 1:2
-                valid = cache.PointValid(:, displayCondition, index) & ...
+                valid = pointValid(:, displayCondition, index) & ...
                     strcmpi(string(cache.Monkey), monkeyNames(displayMonkey));
                 x = double(cache.PointAI(valid, displayCondition, index));
                 y = double(cache.PointBias(valid, displayCondition, index));
                 alpha = od(valid);
+                if isCorrelationOD
+                    alpha = alpha ./ 2;
+                end
                 alpha = min(max(alpha, 0), 1);
+                alpha = options.MarkerFaceAlphaFloor + ...
+                    (options.MarkerFaceAlphaCeiling - ...
+                    options.MarkerFaceAlphaFloor) .* alpha;
                 set(scatterHandles(displayCondition, displayMonkey), ...
                     'XData', x, 'YData', y, 'AlphaData', alpha);
             end
-            slope = cache.Statistics.WeightedSlope(displayCondition, index);
-            intercept = cache.Statistics.WeightedIntercept(displayCondition, index);
+            slope = statistics.WeightedSlope(displayCondition, index);
+            intercept = statistics.WeightedIntercept(displayCondition, index);
             if isfinite(slope) && isfinite(intercept)
                 fitLines(displayCondition).YData = intercept + slope .* xPlot;
             else
@@ -320,11 +386,17 @@ app.AllCueOptimalCursor = optimalCursor;
         weightAxes.YLim = [0 max(0.08, 1.12 * max(nominalWeights))];
         metricCursor.Value = sigma;
 
-        n2D = cache.Statistics.N2DSessions(index);
-        n3D = cache.Statistics.N3DSessions(index);
+        n2D = statistics.N2DSessions(index);
+        n3D = statistics.N3DSessions(index);
+        if options.UnitType == "2D"
+            selectedCount = n2D;
+        else
+            selectedCount = n3D;
+        end
         title(populationAxes, sprintf([ ...
-            'MT 2D Gaussian-meta population | sigma %.5g | ' ...
-            'meta-classified 2D N=%d'], sigma, n2D), ...
+            '%s %s Gaussian-meta population | %s | sigma %.5g | ' ...
+            'meta-classified %s N=%d'], areaName, options.UnitType, ...
+            odLabel, sigma, options.UnitType, selectedCount), ...
             'FontSize', 17);
         if isObjectiveMode
             if isDistanceMode
@@ -356,10 +428,11 @@ app.AllCueOptimalCursor = optimalCursor;
             'omitnan');
         lines = [ ...
             string(sprintf('sigma = %.7g', sigma)); ...
+            "OD definition = " + odDefinition; ...
             string(sprintf('median effective channels = %.2f', effective)); ...
             string(sprintf('meta 2D / 3D = %d / %d', ...
-            cache.Statistics.N2DSessions(index), ...
-            cache.Statistics.N3DSessions(index)))];
+            statistics.N2DSessions(index), ...
+            statistics.N3DSessions(index)))];
         if isObjectiveMode
             lines = [lines; ...
                 string(sprintf('four-cue objective = %.5f', ...
@@ -389,27 +462,32 @@ app.AllCueOptimalCursor = optimalCursor;
         for statCondition = 1:4
             if isInteractionR2Mode
                 displayedPValue = ...
-                    cache.Statistics.P_AIxODWithinCondition( ...
+                    statistics.P_AIxODWithinCondition( ...
                     statCondition, index);
             else
-                displayedPValue = cache.Statistics.P_AI(statCondition, index);
+                displayedPValue = statistics.P_AI(statCondition, index);
             end
             lines(end + 1, 1) = sprintf('%-13s %3d  %+7.3f  %6.3f  %.3g', ...
                 conditionNames(statCondition), ...
-                cache.Statistics.NPoints(statCondition, index), ...
-                cache.Statistics.WeightedSlope(statCondition, index), ...
+                statistics.NPoints(statCondition, index), ...
+                statistics.WeightedSlope(statCondition, index), ...
                 metricPerCue(statCondition, index), ...
                 displayedPValue); %#ok<AGROW>
         end
-        lines = [lines; ""; ...
-            sprintf('Merged eyes: N=%d units=%d', ...
-            cache.Statistics.MergedNPoints(index), ...
-            cache.Statistics.MergedNUnits(index)); ...
-            sprintf('AI + AI:OD R2 = %.3f', ...
-            cache.Statistics.MergedR2(index)); ...
-            sprintf('p(AI) = %.3g | p(AI:OD) = %.3g', ...
-            cache.Statistics.MergedP_AI(index), ...
-            cache.Statistics.MergedP_AIxOD(index))];
+        if options.UnitType == "2D"
+            lines = [lines; ""; ...
+                sprintf('Merged eyes: N=%d units=%d', ...
+                statistics.MergedNPoints(index), ...
+                statistics.MergedNUnits(index)); ...
+                sprintf('AI + AI:OD R2 = %.3f', ...
+                statistics.MergedR2(index)); ...
+                sprintf('p(AI) = %.3g | p(AI:OD) = %.3g', ...
+                statistics.MergedP_AI(index), ...
+                statistics.MergedP_AIxOD(index))];
+        else
+            lines = [lines; ""; ...
+                "Merged-eye summary is not reported for meta 3D sessions."];
+        end
     end
 end
 

@@ -72,7 +72,7 @@ end
 conditionNames = ["Dominant", "Combined", "Stereo", "NonDominant"];
 conditionColors = [254 191 15; 0 0 0; 234 0 233; 110 205 221] ./ 255;
 fig = figure('Color', 'w', 'Visible', visible, ...
-    'Position', [60 80 1540 680], ...
+    'Position', [60 60 1540 760], ...
     'Name', 'Adjacent channel baseline versus augmented R-squared');
 layout = tiledlayout(fig, 1, 2, 'TileSpacing', 'compact', ...
     'Padding', 'compact');
@@ -87,11 +87,12 @@ plotR2Panel(cvAxes, summary, ...
     summary.BaselineMeanCVR2, summary.AdjacentMeanCVR2, ...
     'Repeated held-out R^2', conditionNames, conditionColors);
 
-title(layout, sprintf([ ...
-    'Does adding adjacent-channel AI improve prediction?  ' ...
-    'Baseline: STIM only; augmented: %s'], ...
-    strjoin(channelAxisLabels(result.RelativePositions), ', ')), ...
-    'FontName', 'Arial', 'FontSize', 18, 'FontWeight', 'bold')
+comparisonTitle = [ ...
+    "Does adding adjacent-channel AI improve prediction?"; ...
+    "Baseline: STIM only; augmented: " + ...
+    strjoin(channelAxisLabels(result.RelativePositions), ', ')];
+title(layout, comparisonTitle, ...
+    'FontName', 'Arial', 'FontSize', 17, 'FontWeight', 'bold')
 end
 
 
@@ -134,19 +135,30 @@ for row = 1:height(summary)
         'LineWidth', 0.75, 'HandleVisibility', 'off')
 end
 
-legendHandles = gobjects(8, 1);
-legendLabels = strings(8, 1);
-for conditionIndex = 1:numel(conditionNames)
-    legendHandles(conditionIndex) = scatter(ax, nan, nan, 70, ...
-        conditionColors(conditionIndex, :), 'o', 'filled', ...
-        'MarkerEdgeColor', [0.2 0.2 0.2]);
-    legendLabels(conditionIndex) = "Cue: " + conditionNames(conditionIndex);
-end
+presentConditions = conditionNames(ismember( ...
+    conditionNames, string(summary.Condition)));
 populationNames = ["MT 2D", "MT 3D", "FST 2D", "FST 3D"];
 populationAreas = ["MT", "MT", "FST", "FST"];
 populationTypes = ["2D", "3D", "2D", "3D"];
+summaryPopulations = string(summary.Area) + " " + string(summary.UnitType);
+presentPopulations = ismember(populationNames, summaryPopulations);
+legendCount = numel(presentConditions) + nnz(presentPopulations);
+legendHandles = gobjects(legendCount, 1);
+legendLabels = strings(legendCount, 1);
+legendIndex = 0;
+for condition = presentConditions
+    conditionIndex = find(conditionNames == condition, 1);
+    legendIndex = legendIndex + 1;
+    legendHandles(legendIndex) = scatter(ax, nan, nan, 70, ...
+        conditionColors(conditionIndex, :), 'o', 'filled', ...
+        'MarkerEdgeColor', [0.2 0.2 0.2]);
+    legendLabels(legendIndex) = "Cue: " + condition;
+end
 for populationIndex = 1:numel(populationNames)
-    legendIndex = numel(conditionNames) + populationIndex;
+    if ~presentPopulations(populationIndex)
+        continue
+    end
+    legendIndex = legendIndex + 1;
     legendHandles(legendIndex) = scatter(ax, nan, nan, 70, ...
         [0.55 0.55 0.55], populationMarker( ...
         populationAreas(populationIndex), populationTypes(populationIndex)), ...
@@ -202,6 +214,8 @@ conditionOrder = ["Dominant", "Combined", "Stereo", "NonDominant"];
 [~, order] = ismember(string({groups.Condition}), conditionOrder);
 [~, sortIndex] = sort(order);
 groups = groups(sortIndex);
+conditionsToPlot = conditionOrder(ismember( ...
+    conditionOrder, string({groups.Condition})));
 
 allValues = nan(0, 1);
 for groupIndex = 1:numel(groups)
@@ -221,25 +235,33 @@ end
 padding = 0.12 * diff(valueInterval);
 sharedYLim = valueInterval + [-padding padding];
 
+plotCount = numel(conditionsToPlot);
+if plotCount == 1
+    figurePosition = [80 80 980 780];
+    tileRows = 1;
+    tileColumns = 1;
+elseif plotCount == 2
+    figurePosition = [80 80 1500 760];
+    tileRows = 1;
+    tileColumns = 2;
+else
+    figurePosition = [80 30 1560 1080];
+    tileRows = 2;
+    tileColumns = 2;
+end
+
 fig = figure('Color', 'w', 'Visible', visible, ...
-    'Position', [80 30 1560 1080], ...
+    'Position', figurePosition, ...
     'Name', sprintf('%s %s adjacent-channel coefficient silhouettes', ...
     area, unitType));
-layout = tiledlayout(fig, 2, 2, 'TileSpacing', 'loose', ...
+layout = tiledlayout(fig, tileRows, tileColumns, 'TileSpacing', 'loose', ...
     'Padding', 'loose');
 colors = lines(numel(result.RelativePositions));
 
-for conditionIndex = 1:numel(conditionOrder)
+for conditionIndex = 1:numel(conditionsToPlot)
     ax = nexttile(layout);
     matching = find(arrayfun(@(group) ...
-        group.Condition == conditionOrder(conditionIndex), groups), 1);
-    if isempty(matching)
-        axis(ax, 'off')
-        text(ax, 0.5, 0.5, conditionOrder(conditionIndex) + ...
-            ": insufficient data", 'HorizontalAlignment', 'center', ...
-            'FontName', 'Arial')
-        continue
-    end
+        group.Condition == conditionsToPlot(conditionIndex), groups), 1);
 
     group = groups(matching);
     samples = group.AugmentedCV.BetaSamples(:, 2:end);
@@ -250,14 +272,14 @@ for conditionIndex = 1:numel(conditionOrder)
     plotViolinSilhouettes(ax, samples, fullEstimate, colors)
     xticks(ax, 1:numel(result.RelativePositions))
     xticklabels(ax, channelAxisLabels(result.RelativePositions))
-    if conditionIndex <= 2
+    if tileRows > 1 && conditionIndex <= tileColumns
         xticklabels(ax, strings(size(result.RelativePositions)))
     end
     xlim(ax, [0.45 numel(result.RelativePositions) + 0.55])
     ylim(ax, sharedYLim)
     ylabel(ax, 'Regression coefficient (\beta)', ...
         'FontName', 'Arial', 'FontSize', 12)
-    title(ax, conditionOrder(conditionIndex), ...
+    title(ax, conditionsToPlot(conditionIndex), ...
         'FontName', 'Arial', 'FontSize', 13, 'FontWeight', 'bold')
     subtitle(ax, sprintf( ...
         'n = %d; \\DeltaR^2 = %.3f; mean \\DeltaCV R^2 = %.3f', ...
@@ -341,6 +363,7 @@ pngFile = fullfile(outputFolder, [char(fileStem), '.png']);
 pdfFile = fullfile(outputFolder, [char(fileStem), '.pdf']);
 figFile = fullfile(outputFolder, [char(fileStem), '.fig']);
 drawnow
+pause(0.15)
 exportgraphics(fig, pngFile, 'Resolution', 300)
 exportgraphics(fig, pdfFile, 'ContentType', 'vector')
 savefig(fig, figFile)

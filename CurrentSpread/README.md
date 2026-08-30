@@ -59,6 +59,20 @@ R-squared:
 analysis = RunTuningBehaviorPredictionByDiscontinuity;
 ```
 
+`RunQuickTuningWindowDiameterStim2D.m` measures full-tuning heterogeneity over
+the complete physical contact window `-4:4` for MT and FST sessions classified
+as 2D at the stimulation channel. It calculates all 36 cross-validated pair
+distances among the nine contacts and defines the window diameter as their
+maximum. The stimulation-channel cohort also requires the source MonoL and
+MonoR `p_AI < 0.05` gate. All nine contacts must exist, be live, and contain
+common-valid Quick-task trials. The default outputs are written beneath
+`C:\EM\StimTuningAnalysis`, including an MT/FST overlaid probability histogram,
+session audit, all pair distances, diameter-pair span summary, and MAT result:
+
+```matlab
+analysis = RunQuickTuningWindowDiameterStim2D;
+```
+
 ## Inputs and outputs
 
 The current step-weight and Gaussian cross-validation analyses load the updated
@@ -102,6 +116,78 @@ The default input is the current
 overridden explicitly. The default `NeighborRadius=1` follows the requested
 adjacent-channel-first analysis; a larger radius can be requested only after
 the held-out comparison warrants expansion.
+
+## Weighted centered-window meta-tuning comparison
+
+`RunWeightedMetaTuningBiasComparison.m` tests whether combining complete Quick
+tuning curves across a centered physical-contact window improves behavioral-
+bias prediction relative to a reconstructed stimulation-contact-only baseline:
+
+```matlab
+result = RunWeightedMetaTuningBiasComparison; % CH-1:CH+1
+```
+
+Each channel is z-scored once across all valid Quick trials, cues, and
+coherences. Nonnegative weights constrained to sum to one form a trial-level
+meta tuning. Cue-specific meta AI is calculated from all available matched
+nonzero coherence pairs, while meta OD uses the same weights on the raw-FR
+meta curves. For the default radius-1 window, the baseline is the nested
+weight vector `[0 1 0]` on the same three-channel complete-trial support.
+
+The primary cue-wise model is `Bias ~ MetaAI`; `Bias ~ MetaAI + MetaAI:OD` is
+exported as a secondary sensitivity analysis. The all-cue analysis learns one
+shared spatial weight vector per area/type with separate cue-specific
+regression coefficients; the Stereo-only analysis learns its own weight
+vector. Original stimulation-site unit classes, cue labels, and behavioral
+responses remain fixed, while meta-OD sign changes are audited rather than
+used to relabel outcomes.
+
+Weights and behavioral coefficients are refit only inside each outer training
+fold. Twenty repeated five-fold session-grouped splits compare the optimized
+meta readout with the center-only baseline on identical sessions, observations,
+folds, and training-mean null predictions. Outputs default to:
+
+```text
+C:\EM\CurrentSpread\WeightedMetaTuningBiasComparison_Radius1
+```
+
+For the five-contact `CH-2:CH+2` version:
+
+```matlab
+result = RunWeightedMetaTuningBiasComparison( ...
+    NeighborRadius=2, WeightStep=0.1, ...
+    OutputFolder="C:\EM\CurrentSpread\WeightedMetaTuningBiasComparison_Radius2");
+```
+
+The radius-2 run uses a documented 0.10 simplex grid (1,001 candidate weight
+vectors). A 0.05 five-weight grid would contain 10,626 candidates and would be
+46 times larger than the radius-1 search. The five-channel baseline is the
+one-hot center vector `[0 0 1 0 0]` on the same five-contact trial support.
+Because radius 1 and radius 2 require different complete-contact cohorts, their
+results are descriptive side-by-side comparisons rather than a direct nested
+test of whether `CH-2/CH+2` add value beyond `CH-1/STIM/CH+1`.
+
+For the nine-contact `CH-4:CH+4` exploratory version:
+
+```matlab
+result = RunWeightedMetaTuningBiasComparison( ...
+    NeighborRadius=4, WeightStep=0.2, ...
+    OutputFolder="C:\EM\CurrentSpread\WeightedMetaTuningBiasComparison_Radius4");
+```
+
+The radius-4 run uses a coarser 0.20 simplex grid containing 1,287 candidate
+weight vectors. Its center-only baseline is
+`[0 0 0 0 1 0 0 0 0]` on the identical nine-contact support. Requiring a
+complete centered nine-contact window further reduces the eligible cohort.
+When the output folder and weight step are omitted, the runner now derives a
+radius-specific external folder and selects this safe coarse grid automatically.
+Therefore, radius-1, radius-2, and radius-4 results should not be interpreted
+as a strict nested comparison unless all window sizes are refit on the same
+nine-contact cohort, trial support, and CV partitions.
+
+The output bundle includes group and cue summaries, fold/full-fit weights,
+cache/reconstruction audits, ordinary-versus-held-out R-squared figures,
+weight silhouettes, and a complete MAT result.
 
 ## Quick-task versus stimulation-task tuning correlation
 
@@ -314,50 +400,61 @@ combined-cue Gaussian analyses. They evaluate sigma values from 0.01 to 100,
 plot repeated five-fold cross-validated R-squared against sigma, and save the
 Gaussian profile corresponding to the largest mean cross-validated R-squared.
 
-`BuildInteractiveGaussianMetaPopulationCache.m` precomputes the MT population
-analysis over 1,000 logarithmically spaced sigma values from 0.01 to 100. Each
-Quick session is loaded only once. At every sigma, AI is rebuilt from the
-channel-standardized Gaussian meta tuning, while signed OD, dominant-eye cue
-ordering, and 2D/3D class are rebuilt from the matching raw-FR meta tuning.
-The default cohort uses the current workbook-refreshed GOF table without any
-adjacent-channel discontinuity exclusions. A row-exclusion CSV can still be
-supplied explicitly through `ExcludedRowsFile` for a separate filtered run.
-Compact point arrays, OD-weighted population lines, model statistics, and a
-per-sigma CSV are saved under
-`C:\EM\CurrentSpread\02_gaussian\InteractiveGaussianMetaPopulation`.
+The interactive population implementation is organized under
+`02_gaussian/interactive_population`:
 
-`ExploreInteractiveGaussianMetaPopulation.m` opens a slider-based viewer of
-that cache. Slider movement only selects saved results; it does not recalculate
-meta tuning or population fits. `RunInteractiveGaussianMetaPopulation.m`
-builds the default cache when needed and then opens the viewer.
+- `common`: area-specific cache generation and the shared slider viewer;
+- `cv_ai_od`: repeated-CV `DeltaBias ~ AI + AI:OD` objective and viewers;
+- `ordinary_ai_od`: full-sample ordinary-R-squared objective and viewers;
+- `type2_distance`: distance-to-displayed-Type-II-line objective and viewers.
 
-`BuildAllCueR2GaussianMetaObjective.m` reuses the same dense scatter cache and
-selects sigma by maximizing the unweighted sum of the four MT 2D per-cue
-repeated five-fold cross-validated R-squared values (Dominant + Combined +
-Stereo + NonDominant). Every cue uses `DeltaBias ~ AI + AI:OD`, with no
-standalone OD main effect.
-`ExploreInteractiveGaussianMetaPopulationAllCueR2.m` opens a dedicated viewer
-at that optimum, adds the summed-R-squared objective and optimum to the metric
-panel, and otherwise leaves the population scatter unchanged. Run
-`RunInteractiveGaussianMetaPopulationAllCueR2.m` for the one-command workflow.
+`BuildInteractiveGaussianMetaPopulationCache.m` supports `Area="MT"` or
+`Area="FST"` and precomputes 1,000 logarithmically spaced sigma values from
+0.01 to 100. Each Quick session is loaded only once. At every sigma, AI is
+rebuilt from channel-standardized Gaussian meta tuning, while signed OD,
+dominant-eye cue ordering, and 2D/3D class are rebuilt from the matching raw-FR
+meta tuning. The default cohort uses the current workbook-refreshed GOF table
+without adjacent-channel discontinuity exclusions. Each cache contains both
+meta-2D and meta-3D point-validity arrays and population statistics.
 
-`BuildAllCueOrdinaryR2GaussianMetaObjective.m` is the simpler non-CV version.
-It maximizes the sum of the four full-sample ordinary R-squared values, with
-every cue still using `DeltaBias ~ AI + AI:OD`. The dedicated viewer and
-launcher are `ExploreInteractiveGaussianMetaPopulationAllCueOrdinaryR2.m` and
-`RunInteractiveGaussianMetaPopulationAllCueOrdinaryR2.m`.
+The cache accepts `ODDefinition="Max"` (the default) or
+`ODDefinition="Correlation"`. Correlation OD is
+`PearsonR(Combined,MonoL) - PearsonR(Combined,MonoR)` on the common finite
+coherence support. Its sign controls dominant-eye cue ordering and the
+dominant-curve choice for 2D/3D classification; its absolute value controls OD
+weighting and marker opacity. Correlation-OD caches are kept separate under
+`InteractiveGaussianMetaPopulation\CorrelationOD\<Area>`.
+Correlation-OD viewers use `MarkerFaceAlpha = min(abs(OD)/2, 1)` because the
+correlation-OD range is [-2, 2], and use 0.95 edge opacity. Max-OD viewers retain
+the original `MarkerFaceAlpha = abs(OD)` mapping and 0.85 edge opacity.
 
-`BuildAllCueType2DistanceGaussianMetaObjective.m` provides the corresponding
-distance-based optimization. At every sigma it computes each dot's squared
-perpendicular distance to its cue's displayed OD-weighted Type II population
-line, averages those squared distances separately for Dominant, Combined,
-Stereo, and NonDominant, and minimizes the unweighted sum of the four cue
-means. This keeps different cue/session counts from changing the relative cue
-weight. `ExploreInteractiveGaussianMetaPopulationAllCueType2Distance.m` opens
-the slider at that minimum and shows the four cue-wise mean-distance curves
-plus their summed objective. Run
-`RunInteractiveGaussianMetaPopulationAllCueType2Distance.m` for the one-command
-workflow; it reuses the existing 1,000-sigma scatter cache.
+Use the two top-level apps instead of method-specific launcher lists:
+
+- `RunGaussianMetaPopulationApp.m` opens the Max-OD app;
+- `RunGaussianMetaPopulationCorrelationODApp.m` opens the separate
+  correlation-OD app.
+
+Each app provides dropdowns for area (MT/FST), meta-derived population
+(2D/3D), and optimization method (CV AI+AI:OD, ordinary AI+AI:OD, or Type-II
+distance). Changing a dropdown replaces the displayed cached view. If a cache
+or objective is missing or older than its cache, the app builds the complete
+area-specific 2D/3D suite automatically. Older one-method launchers are retained
+under `interactive_population/legacy_launchers` only for compatibility.
+
+Generated artifacts default to area-specific folders outside the repository:
+`C:\EM\CurrentSpread\02_gaussian\InteractiveGaussianMetaPopulation\MT` and
+`...\FST`. `BuildInteractiveGaussianMetaPopulationSuite(Area="FST")` builds
+the FST cache plus all three objectives for both meta-2D and meta-3D sessions.
+
+The CV method maximizes the unweighted sum of four cue-specific repeated
+five-fold cross-validated R-squared values. The ordinary method maximizes the
+corresponding four full-sample R-squared values. Both use
+`DeltaBias ~ AI + AI:OD` without an OD main effect. The distance method
+minimizes the unweighted sum of cue-wise mean squared perpendicular distances
+to the displayed OD-weighted Type II lines.
+
+Slider movement reads only cached results and does not recalculate tuning or
+fits.
 
 `PlotOriginalVsOptimizedAIOD.m` reproduces the population-analysis perspective
 scatter convention for Jim MT 2D sessions: dominant and non-dominant eyes are

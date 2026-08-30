@@ -2,16 +2,17 @@
 
 clear; close all
 scriptFolder = fileparts(mfilename('fullpath'));
-addpath(scriptFolder);
+interactiveFolder = fileparts(scriptFolder);
+addpath(fullfile(interactiveFolder, 'common'));
 
 cacheFile = ...
     "C:\EM\CurrentSpread\02_gaussian\" + ...
-    "InteractiveGaussianMetaPopulation\" + ...
+    "InteractiveGaussianMetaPopulation\MT\" + ...
     "GaussianMetaPopulationSigmaCache.mat";
 
 if ~isfile(cacheFile)
     fprintf('Interactive cache is missing; building the 1000-sigma cache.\n');
-    BuildInteractiveGaussianMetaPopulationCache;
+    BuildInteractiveGaussianMetaPopulationCache(Area="MT");
 end
 
 interactiveGaussianMetaPopulation = ...

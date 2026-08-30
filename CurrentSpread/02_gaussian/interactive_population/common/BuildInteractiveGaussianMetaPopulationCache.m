@@ -1,5 +1,5 @@
 function cache = BuildInteractiveGaussianMetaPopulationCache(options)
-%BUILDINTERACTIVEGAUSSIANMETAPOPULATIONCACHE Precompute MT population by sigma.
+%BUILDINTERACTIVEGAUSSIANMETAPOPULATIONCACHE Precompute population by sigma.
 %
 % This is the batch half of the interactive Gaussian-meta population
 % explorer. It evaluates a dense, logarithmically spaced sigma grid without
@@ -7,9 +7,11 @@ function cache = BuildInteractiveGaussianMetaPopulationCache(options)
 % every sigma. Each Quick session is loaded once. Trial-level channel means
 % and covariance matrices are then used to reproduce the Gaussian-weighted
 % meta AI, raw-FR OD, and raw-FR Z3D-Z2D classification for every sigma.
+% OD can be defined either by the left/right maximum-response difference or
+% by the difference between the two eye-to-Combined correlations.
 %
 % Population selection and plotting match the current pipeline:
-%   * MT and the requested monkey selection;
+%   * the requested MT/FST area and monkey selection;
 %   * stored monocular p_AI(2) and p_AI(3) < 0.05;
 %   * optional adjacent-channel continuity exclusions;
 %   * AI from the z-scored Gaussian meta tuning;
@@ -17,7 +19,7 @@ function cache = BuildInteractiveGaussianMetaPopulationCache(options)
 %   * dominant/non-dominant cue ordering reassigned separately at each sigma;
 %   * OD-weighted population lines constrained through the origin.
 %
-% The default output is:
+% The default output is area-specific under:
 %   C:\EM\CurrentSpread\02_gaussian\InteractiveGaussianMetaPopulation
 %
 % Example:
@@ -26,14 +28,17 @@ function cache = BuildInteractiveGaussianMetaPopulationCache(options)
 arguments
     options.StateFile (1, 1) string = ...
         "C:\EM\PopulationAnalysis\unit_table_gof.mat"
-    options.OutputFolder (1, 1) string = [ ...
-        "C:\EM\CurrentSpread\02_gaussian\" + ...
-        "InteractiveGaussianMetaPopulation"]
+    options.OutputFolder (1, 1) string = ""
     options.CacheFileName (1, 1) string = ...
         "GaussianMetaPopulationSigmaCache.mat"
     options.SigmaValues (1, :) double = logspace(-2, 2, 1000)
     options.Monkey (1, 1) string ...
         {mustBeMember(options.Monkey, ["Both", "Jim", "Clay"])} = "Both"
+    options.Area (1, 1) string ...
+        {mustBeMember(options.Area, ["MT", "FST"])} = "MT"
+    options.ODDefinition (1, 1) string ...
+        {mustBeMember(options.ODDefinition, ...
+        ["Max", "RMSE", "Correlation", "PartialCorrelation"])} = "Max"
     options.TuningAlpha (1, 1) double ...
         {mustBeGreaterThan(options.TuningAlpha, 0), ...
         mustBeLessThan(options.TuningAlpha, 1)} = 0.05
@@ -56,7 +61,8 @@ if isempty(sigmaValues) || any(~isfinite(sigmaValues)) || ...
 end
 
 scriptFolder = string(fileparts(mfilename('fullpath')));
-projectFolder = string(fileparts(fileparts(scriptFolder)));
+currentSpreadRoot = string(fileparts(fileparts(fileparts(scriptFolder))));
+projectFolder = string(fileparts(currentSpreadRoot));
 populationFolder = fullfile(projectFolder, 'PopulationAnalysis');
 requiredPopulationFunctions = [ ...
     "LoadLatestUnitTableGof.m", "CalculateSigmoidFitBiases.m"];
@@ -67,7 +73,22 @@ for index = 1:numel(requiredPopulationFunctions)
             fullfile(populationFolder, requiredPopulationFunctions(index)));
     end
 end
-addpath(fileparts(scriptFolder), scriptFolder, populationFolder);
+addpath(currentSpreadRoot, scriptFolder, populationFolder);
+if strlength(options.OutputFolder) == 0
+    outputRoot = ...
+        "C:\EM\CurrentSpread\02_gaussian\InteractiveGaussianMetaPopulation";
+    if options.ODDefinition ~= "Max"
+        outputRoot = fullfile(outputRoot, 'CorrelationOD');
+        if options.ODDefinition == "RMSE"
+            outputRoot = replace(outputRoot, 'CorrelationOD', 'RMSEOD');
+        elseif options.ODDefinition == "PartialCorrelation"
+            outputRoot = replace(outputRoot, 'CorrelationOD', ...
+                'PartialCorrelationOD');
+        end
+    end
+    options.OutputFolder = fullfile(outputRoot, options.Area);
+end
+assertOutputOutsideRepository(options.OutputFolder, currentSpreadRoot);
 ensureFolder(options.OutputFolder);
 
 [unitTable, resolvedStateFile, workbookAudit] = ...
@@ -77,12 +98,12 @@ requireVariables(unitTable, ["Date", "Monkey", "ROI", "StimElec", ...
 
 excludedRows = loadExcludedRows(options.ExcludedRowsFile, height(unitTable));
 candidateMask = populationCandidateMask( ...
-    unitTable, options.Monkey, options.TuningAlpha);
+    unitTable, options.Area, options.Monkey, options.TuningAlpha);
 candidateMask(excludedRows) = false;
 sourceRows = find(candidateMask);
 if isempty(sourceRows)
     error('GaussianMetaInteractive:NoCandidates', ...
-        'No MT population candidates remained after selection.');
+        'No %s population candidates remained after selection.', options.Area);
 end
 
 [deltaBias, ~, ~, validBiasFit] = ...
@@ -104,8 +125,8 @@ sessionMonkey = strings(numSessions, 1);
 sessionDate = NaT(numSessions, 1);
 sessionStimChannel = nan(numSessions, 1);
 
-fprintf(['Building Gaussian-meta MT population cache: %d sessions x ' ...
-    '%d sigma values.\n'], numSessions, numSigmas);
+fprintf(['Building Gaussian-meta %s population cache: %d sessions x ' ...
+    '%d sigma values.\n'], options.Area, numSessions, numSigmas);
 batchStart = tic;
 for sessionIndex = 1:numSessions
     sourceRow = sourceRows(sessionIndex);
@@ -115,7 +136,8 @@ for sessionIndex = 1:numSessions
         summary = preprocessQuickSession(unitTable, sourceRow, ...
             recordingDates(sourceRow), options);
         [thisAI, thisOD, thisZDifference, thisEffectiveChannels] = ...
-            evaluateSessionAcrossSigma(summary, sigmaValues);
+            evaluateSessionAcrossSigma( ...
+            summary, sigmaValues, options.ODDefinition);
         metaAI(sessionIndex, :, :) = reshape(single(thisAI), ...
             [1, 4, numSigmas]);
         metaOD(sessionIndex, :) = single(thisOD);
@@ -147,11 +169,13 @@ eligible = successfulSession & isfinite(metaOD) & metaOD ~= 0 & ...
 is2D = eligible & metaZDifference < 0;
 is3D = eligible & metaZDifference > 0;
 
-[pointAI, pointBias, pointOD, pointValid, sourceCue] = ...
-    buildPopulationPoints(metaAI, metaOD, is2D, sourceRows, ...
+[pointAI, pointBias, pointOD, pointValid2D, pointValid3D, sourceCue] = ...
+    buildPopulationPoints(metaAI, metaOD, is2D, is3D, sourceRows, ...
     deltaBias, validBiasFit);
-statistics = calculatePopulationStatistics( ...
-    pointAI, pointBias, pointOD, pointValid, sourceRows, is2D, is3D);
+statistics2D = calculatePopulationStatistics( ...
+    pointAI, pointBias, pointOD, pointValid2D, sourceRows, is2D, is3D);
+statistics3D = calculatePopulationStatistics( ...
+    pointAI, pointBias, pointOD, pointValid3D, sourceRows, is2D, is3D);
 
 sessionAudit = table(sourceRows, sessionMonkey, sessionDate, ...
     sessionStimChannel, sessionChannelCount, sessionRelativePositions, ...
@@ -162,30 +186,45 @@ sessionAudit = table(sourceRows, sessionMonkey, sessionDate, ...
 writetable(sessionAudit, fullfile(options.OutputFolder, ...
     'GaussianMetaPopulationSessionAudit.csv'));
 
-summaryTable = buildSigmaSummaryTable( ...
-    sigmaValues, effectiveChannels, statistics);
-writetable(summaryTable, fullfile(options.OutputFolder, ...
+summaryTable2D = buildSigmaSummaryTable( ...
+    sigmaValues, effectiveChannels, statistics2D);
+summaryTable3D = buildSigmaSummaryTable( ...
+    sigmaValues, effectiveChannels, statistics3D);
+writetable(summaryTable2D, fullfile(options.OutputFolder, ...
     'GaussianMetaPopulationSigmaSummary.csv'));
+writetable(summaryTable2D, fullfile(options.OutputFolder, ...
+    'GaussianMetaPopulationSigmaSummary_2D.csv'));
+writetable(summaryTable3D, fullfile(options.OutputFolder, ...
+    'GaussianMetaPopulationSigmaSummary_3D.csv'));
 
 validation = struct();
-if options.ValidateAgainstBuilder
+if options.ValidateAgainstBuilder && options.ODDefinition == "Max"
     validation = validateAgainstExistingBuilder(unitTable, candidateMask, ...
         sourceRows, sigmaValues, metaAI, metaOD, metaZDifference, options);
+elseif options.ValidateAgainstBuilder
+    validation.Skipped = true;
+    validation.Reason = ...
+        "The established meta builder exposes maximum-response OD only; " + ...
+        "correlation OD is verified independently by unit tests.";
 end
 
 cache = struct();
-cache.SchemaVersion = 1;
+cache.SchemaVersion = 3;
 cache.Created = datetime('now', 'TimeZone', 'local');
+odDescription = odDefinitionDescription(options.ODDefinition);
 cache.Description = [ ...
-    "Interactive MT 2D Gaussian-meta population cache"; ...
+    "Interactive " + options.Area + " Gaussian-meta population cache"; ...
     "AI from channel-standardized Gaussian meta tuning"; ...
-    "OD and Z3D-Z2D class from matching raw-FR Gaussian meta tuning"; ...
+    "OD from matching raw-FR Gaussian meta tuning: " + odDescription; ...
+    "Z3D-Z2D class from matching raw-FR Gaussian meta tuning"; ...
     "Dominant-eye cue ordering recomputed independently at every sigma"; ...
     "Population lines are OD-weighted least-squares slopes through zero"];
 cache.StateFile = string(resolvedStateFile);
 cache.OutputFolder = options.OutputFolder;
 cache.MonkeySelection = options.Monkey;
-cache.Area = "MT";
+cache.Area = options.Area;
+cache.ODDefinition = options.ODDefinition;
+cache.ODFormula = odDefinitionFormula(options.ODDefinition);
 cache.TuningAlpha = options.TuningAlpha;
 cache.ExcludedRowsFile = options.ExcludedRowsFile;
 cache.ExcludedSourceRows = excludedRows;
@@ -208,12 +247,18 @@ cache.Is3D = is3D;
 cache.PointAI = pointAI;
 cache.PointBias = pointBias;
 cache.PointOD = pointOD;
-cache.PointValid = pointValid;
+cache.PointValid = pointValid2D;
+cache.PointValid2D = pointValid2D;
+cache.PointValid3D = pointValid3D;
 cache.SourceCue = sourceCue;
 cache.ConditionNames = ["Dominant", "Combined", "Stereo", "NonDominant"];
 cache.ConditionColors = [254 191 15; 0 0 0; 234 0 233; 110 205 221] ./ 255;
-cache.Statistics = statistics;
-cache.SigmaSummary = summaryTable;
+cache.Statistics = statistics2D;
+cache.Statistics2D = statistics2D;
+cache.Statistics3D = statistics3D;
+cache.SigmaSummary = summaryTable2D;
+cache.SigmaSummary2D = summaryTable2D;
+cache.SigmaSummary3D = summaryTable3D;
 cache.SessionAudit = sessionAudit;
 cache.Validation = validation;
 
@@ -224,7 +269,9 @@ manifest = [ ...
     "Gaussian-meta interactive population cache"; ...
     "Created: " + string(cache.Created); ...
     "State file: " + string(resolvedStateFile); ...
-    "Area: MT"; ...
+    "Area: " + options.Area; ...
+    "OD definition: " + options.ODDefinition; ...
+    "OD formula: " + cache.ODFormula; ...
     "Monkey selection: " + options.Monkey; ...
     "Sigma count: " + numSigmas; ...
     "Sigma range: " + sigmaValues(1) + " to " + sigmaValues(end); ...
@@ -359,7 +406,7 @@ end
 
 
 function [metaAI, metaOD, metaZDifference, effectiveChannels] = ...
-    evaluateSessionAcrossSigma(summary, sigmaValues)
+    evaluateSessionAcrossSigma(summary, sigmaValues, odDefinition)
 relativePositions = double(summary.RelativePositions(:));
 weights = exp(-(relativePositions .^ 2) ./ ...
     (2 .* double(sigmaValues(:)').^2));
@@ -413,17 +460,8 @@ for cue = 1:4
     metaAI(cue, all(~isfinite(ratio), 1)) = NaN;
 end
 
-leftMean = reshape(rawMetaMean(2, :, :), coherenceCount, numSigmas);
-rightMean = reshape(rawMetaMean(3, :, :), coherenceCount, numSigmas);
-validLeft = summary.ObservationCount(2, :)' > 0;
-validRight = summary.ObservationCount(3, :)' > 0;
-leftMean(~repmat(validLeft, 1, numSigmas)) = NaN;
-rightMean(~repmat(validRight, 1, numSigmas)) = NaN;
-leftMaximum = max(leftMean, [], 1, 'omitnan');
-rightMaximum = max(rightMean, [], 1, 'omitnan');
-odDenominator = leftMaximum + rightMaximum;
-metaOD = (leftMaximum - rightMaximum) ./ odDenominator;
-metaOD(~isfinite(metaOD) | abs(odDenominator) <= eps) = NaN;
+metaOD = calculateGaussianMetaOD( ...
+    rawMetaMean, summary.ObservationCount, odDefinition);
 
 metaZDifference = nan(1, numSigmas);
 for sigmaIndex = 1:numSigmas
@@ -435,14 +473,44 @@ end
 end
 
 
-function [pointAI, pointBias, pointOD, pointValid, sourceCue] = ...
-    buildPopulationPoints(metaAI, metaOD, is2D, sourceRows, ...
+function description = odDefinitionDescription(definition)
+switch definition
+    case "Max"
+        description = "normalized MonoL/MonoR maximum-response difference";
+    case "RMSE"
+        description = "normalized Combined-to-MonoL/MonoR RMSE difference";
+    case "Correlation"
+        description = "Combined-to-MonoL r minus Combined-to-MonoR r";
+    case "PartialCorrelation"
+        description = "Fisher-z partial-correlation left-minus-right difference";
+end
+end
+
+
+function formula = odDefinitionFormula(definition)
+switch definition
+    case "Max"
+        formula = "(max(MonoL)-max(MonoR))/(max(MonoL)+max(MonoR))";
+    case "RMSE"
+        formula = "(RMSE(Combined,MonoR)-RMSE(Combined,MonoL))/(RMSE(Combined,MonoR)+RMSE(Combined,MonoL))";
+    case "Correlation"
+        formula = "PearsonR(Combined,MonoL)-PearsonR(Combined,MonoR)";
+    case "PartialCorrelation"
+        formula = "FisherZ(partialR(Combined,MonoL|MonoR))-FisherZ(partialR(Combined,MonoR|MonoL))";
+end
+end
+
+
+function [pointAI, pointBias, pointOD, pointValid2D, pointValid3D, ...
+    sourceCue] = buildPopulationPoints(metaAI, metaOD, is2D, is3D, ...
+    sourceRows, ...
     deltaBias, validBiasFit)
 [numSessions, ~, numSigmas] = size(metaAI);
 pointAI = nan(numSessions, 4, numSigmas, 'single');
 pointBias = nan(numSessions, 4, numSigmas, 'single');
 pointOD = abs(metaOD);
-pointValid = false(numSessions, 4, numSigmas);
+pointValid2D = false(numSessions, 4, numSigmas);
+pointValid3D = false(numSessions, 4, numSigmas);
 sourceCue = zeros(numSessions, 4, numSigmas, 'uint8');
 leftOrder = [2 1 4 3];
 rightOrder = [3 1 4 2];
@@ -464,10 +532,12 @@ for sessionIndex = 1:numSessions
             pointBias(sessionIndex, condition, sigmaIndex) = ...
                 single(bias);
             sourceCue(sessionIndex, condition, sigmaIndex) = uint8(cue);
-            pointValid(sessionIndex, condition, sigmaIndex) = ...
-                is2D(sessionIndex, sigmaIndex) && ...
-                validBiasFit(sourceRow, cue) && isfinite(ai) && ...
+            validPoint = validBiasFit(sourceRow, cue) && isfinite(ai) && ...
                 isfinite(bias) && isfinite(metaOD(sessionIndex, sigmaIndex));
+            pointValid2D(sessionIndex, condition, sigmaIndex) = ...
+                is2D(sessionIndex, sigmaIndex) && validPoint;
+            pointValid3D(sessionIndex, condition, sigmaIndex) = ...
+                is3D(sessionIndex, sigmaIndex) && validPoint;
         end
     end
 end
@@ -825,11 +895,11 @@ end
 end
 
 
-function mask = populationCandidateMask(unitTable, monkey, alpha)
+function mask = populationCandidateMask(unitTable, area, monkey, alpha)
 rowCount = height(unitTable);
 mask = false(rowCount, 1);
 for row = 1:rowCount
-    if ~strcmpi(getRowText(unitTable.ROI, row), "MT")
+    if ~strcmpi(getRowText(unitTable.ROI, row), area)
         continue
     end
     monkeyName = getRowText(unitTable.Monkey, row);
@@ -839,6 +909,17 @@ for row = 1:rowCount
     pValues = numericArray(unitTable.p_AI, row);
     mask(row) = numel(pValues) >= 3 && isfinite(pValues(2)) && ...
         isfinite(pValues(3)) && pValues(2) < alpha && pValues(3) < alpha;
+end
+end
+
+
+function assertOutputOutsideRepository(outputFolder, repositoryRoot)
+resolvedOutput = string(char(java.io.File(char(outputFolder)).getCanonicalPath()));
+resolvedRepository = string(char(java.io.File(char(repositoryRoot)).getCanonicalPath()));
+if startsWith(lower(resolvedOutput), lower(resolvedRepository + filesep)) || ...
+        strcmpi(resolvedOutput, resolvedRepository)
+    error('GaussianMetaInteractive:RepositoryLocalOutput', ...
+        'OutputFolder must be outside the repository: %s', resolvedOutput);
 end
 end
 
