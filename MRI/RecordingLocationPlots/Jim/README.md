@@ -8,6 +8,14 @@ This folder contains the Jim-specific MRI recording-location workflow.
 - `regenerate_jim_unit_table_gof.m` — regenerates the complete included Jim set.
 - `regenerate_jim_projections_final_offsets.m` — regenerates only coronal and sagittal projections.
 - `regenerate_jim_sagittal_left_hemisphere.m` — regenerates only the left-hemisphere sagittal set.
+- `regenerate_jim_selected_coronal.m` — creates one MT and one FST coronal
+  projection in `C:\EM\RecordingLocationPlots\Jim\SelectedCoronal`. The MT
+  AP voxel 52 and FST AP voxel 65 sections maximize the corresponding ROI
+  mask area across the analysis-covered AP range.
+- `regenerate_jim_all_separated_coronal.m` — creates separate blue-MT and
+  green-FST projections for every consecutive coronal MRI section, including
+  hidden intermediate sections, in
+  `C:\EM\RecordingLocationPlots\Jim\SeparatedCoronal`.
 - `../common/getWorkbookRowsFromUnitTableGof.m` — shared workbook-to-analysis-session matcher.
 
 Run the complete workflow from MATLAB with:

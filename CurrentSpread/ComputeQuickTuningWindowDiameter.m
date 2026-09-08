@@ -1,10 +1,11 @@
 function audit = ComputeQuickTuningWindowDiameter(unitTable, options)
 %COMPUTEQUICKTUNINGWINDOWDIAMETER Full-curve diameter across a channel window.
 %
-% Every requested physical contact is standardized once across common-valid
+% Every included live contact is standardized once across common-valid
 % Quick-task trials from all cues and coherences. Cross-validated squared
-% Euclidean tuning distance is calculated for every unique channel pair.
-% WindowDiameterSquared is the largest split-averaged pair distance.
+% Euclidean tuning distance is calculated for every unique live-channel pair.
+% WindowDiameterSquared is the largest split-averaged pair distance. Dead
+% non-stimulation contacts can optionally be skipped.
 
 arguments
     unitTable table
@@ -23,6 +24,7 @@ arguments
         options.MinTrialsPerCondition, 2)} = 2
     options.RandomSeed (1, 1) double ...
         {mustBeInteger, mustBeNonnegative} = 1
+    options.AllowDeadChannels (1, 1) logical = false
 end
 
 relativePositions = options.RelativePositions;
@@ -43,21 +45,26 @@ elseif numel(candidateMask) ~= rowCount
 end
 
 contactCount = numel(relativePositions);
-pairIndices = nchoosek(1:contactCount, 2);
-pairCount = size(pairIndices, 1);
 tableRow = (1:rowCount)';
 monkey = strings(rowCount, 1);
 recordingDate = normalizeDateColumn(unitTable.Date);
 roi = strings(rowCount, 1);
 stimChannel = nan(rowCount, 1);
 stimProbePosition = nan(rowCount, 1);
-windowChannels = repmat({nan(1, contactCount)}, rowCount, 1);
-channelCenter = repmat({nan(1, contactCount)}, rowCount, 1);
-channelScale = repmat({nan(1, contactCount)}, rowCount, 1);
+requestedWindowChannels = repmat({nan(1, contactCount)}, rowCount, 1);
+windowRelativePositions = repmat({nan(1, 0)}, rowCount, 1);
+windowChannels = repmat({nan(1, 0)}, rowCount, 1);
+deadWindowChannels = repmat({nan(1, 0)}, rowCount, 1);
+channelCenter = repmat({nan(1, 0)}, rowCount, 1);
+channelScale = repmat({nan(1, 0)}, rowCount, 1);
+liveContactCount = zeros(rowCount, 1);
+deadContactCount = zeros(rowCount, 1);
+evaluatedPairCount = zeros(rowCount, 1);
 conditionCount = zeros(rowCount, 1);
 conditionCountByCue = repmat({zeros(1, 4)}, rowCount, 1);
 minimumTrialCount = zeros(rowCount, 1);
-pairDistanceSquared = repmat({nan(1, pairCount)}, rowCount, 1);
+pairRelativePositions = repmat({nan(0, 2)}, rowCount, 1);
+pairDistanceSquared = repmat({nan(1, 0)}, rowCount, 1);
 distanceMatrixSquared = repmat( ...
     {nan(contactCount, contactCount)}, rowCount, 1);
 windowDiameterSquared = nan(rowCount, 1);
@@ -76,7 +83,6 @@ cacheFile = strings(rowCount, 1);
 status = repmat("Pending", rowCount, 1);
 message = strings(rowCount, 1);
 
-stimWindowIndex = find(relativePositions == 0, 1);
 for row = 1:rowCount
     monkey(row) = getRowText(unitTable.Monkey, row);
     roi(row) = getRowText(unitTable.ROI, row);
@@ -101,8 +107,8 @@ for row = 1:rowCount
                 '%d:%d physical-contact window.'], ...
                 relativePositions(1), relativePositions(end));
         end
-        channels = options.ChannelMap(requestedPositions);
-        windowChannels{row} = channels;
+        requestedChannels = options.ChannelMap(requestedPositions);
+        requestedWindowChannels{row} = requestedChannels;
 
         folder = selectCacheFolder(monkey(row), ...
             options.JimCacheFolder, options.ClayCacheFolder);
@@ -121,18 +127,42 @@ for row = 1:rowCount
         validateNeuro(Neuro);
         availableChannelCount = min(declaredChannelCount, ...
             size(Neuro.All, 4));
-        if any(channels > availableChannelCount)
+        if any(requestedChannels > availableChannelCount)
             error('QuickTuningDiameter:UnavailableChannel', ...
                 ['Required channels %s exceed the available channel ' ...
-                'count of %d.'], mat2str(channels), availableChannelCount);
+                'count of %d.'], mat2str(requestedChannels), ...
+                availableChannelCount);
         end
         deadChannels = getDeadChannels(unitTable, row);
-        deadRequired = intersect(channels, deadChannels, 'stable');
-        if ~isempty(deadRequired)
+        deadRequired = intersect(requestedChannels, deadChannels, 'stable');
+        deadWindowChannels{row} = deadRequired;
+        deadContactCount(row) = numel(deadRequired);
+        if ismember(stimChannel(row), deadRequired)
+            error('QuickTuningDiameter:DeadStimChannel', ...
+                'The stimulation channel is marked dead.');
+        end
+        if ~options.AllowDeadChannels && ~isempty(deadRequired)
             error('QuickTuningDiameter:DeadChannel', ...
                 'Required channel(s) marked dead: %s.', ...
                 mat2str(deadRequired));
         end
+        live = ~ismember(requestedChannels, deadRequired);
+        channels = requestedChannels(live);
+        liveRelativePositions = relativePositions(live);
+        liveRequestedIndices = find(live);
+        if numel(channels) < 2
+            error('QuickTuningDiameter:TooFewLiveChannels', ...
+                'At least two live contacts are required within the window.');
+        end
+        windowChannels{row} = channels;
+        windowRelativePositions{row} = liveRelativePositions;
+        liveContactCount(row) = numel(channels);
+        pairIndices = nchoosek(1:numel(channels), 2);
+        pairCount = size(pairIndices, 1);
+        evaluatedPairCount(row) = pairCount;
+        pairRelativePositions{row} = [ ...
+            liveRelativePositions(pairIndices(:, 1))', ...
+            liveRelativePositions(pairIndices(:, 2))'];
 
         [blocks, countsByCue, centers, scales, minCount] = ...
             buildStandardizedConditionBlocks(Neuro, channels, ...
@@ -147,10 +177,12 @@ for row = 1:rowCount
         stream = RandStream('mt19937ar', 'Seed', streamSeed);
         [pairDistances, pairBySplit] = estimatePairDistances( ...
             blocks, pairIndices, options.NumSplits, stream);
-        matrix = zeros(contactCount, contactCount);
+        matrix = nan(contactCount, contactCount);
+        matrix(sub2ind([contactCount, contactCount], ...
+            liveRequestedIndices, liveRequestedIndices)) = 0;
         for pair = 1:pairCount
-            left = pairIndices(pair, 1);
-            right = pairIndices(pair, 2);
+            left = liveRequestedIndices(pairIndices(pair, 1));
+            right = liveRequestedIndices(pairIndices(pair, 2));
             matrix(left, right) = pairDistances(pair);
             matrix(right, left) = pairDistances(pair);
         end
@@ -161,20 +193,22 @@ for row = 1:rowCount
         rightIndex = pairIndices(diameterIndex, 2);
         windowDiameterSquared(row) = diameter;
         windowDiameter(row) = sqrt(max(diameter, 0));
-        diameterLeftRelativePosition(row) = relativePositions(leftIndex);
-        diameterRightRelativePosition(row) = relativePositions(rightIndex);
+        diameterLeftRelativePosition(row) = liveRelativePositions(leftIndex);
+        diameterRightRelativePosition(row) = liveRelativePositions(rightIndex);
         diameterLeftChannel(row) = channels(leftIndex);
         diameterRightChannel(row) = channels(rightIndex);
-        diameterPhysicalSpan(row) = rightIndex - leftIndex;
+        diameterPhysicalSpan(row) = ...
+            liveRelativePositions(rightIndex) - liveRelativePositions(leftIndex);
         [~, splitMaximumIndex] = max(pairBySplit, [], 2);
         diameterPairSplitSelectionFraction(row) = ...
             mean(splitMaximumIndex == diameterIndex);
         meanPairDistanceSquared(row) = mean(pairDistances);
         endpointDistanceSquared(row) = matrix(1, end);
-        stimDistances = matrix(stimWindowIndex, :);
-        stimDistances(stimWindowIndex) = -Inf;
+        stimWindowIndex = find(liveRelativePositions == 0, 1);
+        stimDistances = matrix(liveRequestedIndices(stimWindowIndex), :);
+        stimDistances(liveRequestedIndices(stimWindowIndex)) = -Inf;
         [maxStimDistanceSquared(row), farthestIndex] = ...
-            max(stimDistances);
+            max(stimDistances, [], 'omitmissing');
         maxStimDistanceRelativePosition(row) = ...
             relativePositions(farthestIndex);
         status(row) = "Success";
@@ -184,14 +218,14 @@ for row = 1:rowCount
     end
 end
 
-windowRelativePositions = repmat({relativePositions}, rowCount, 1);
-pairRelativePositions = repmat( ...
-    {[relativePositions(pairIndices(:, 1))', ...
-    relativePositions(pairIndices(:, 2))']}, rowCount, 1);
 numSplits = repmat(options.NumSplits, rowCount, 1);
+allowDeadChannels = repmat(options.AllowDeadChannels, rowCount, 1);
 audit = table(tableRow, monkey, recordingDate, roi, candidateMask, ...
-    stimChannel, stimProbePosition, windowRelativePositions, ...
-    windowChannels, channelCenter, channelScale, conditionCount, ...
+    stimChannel, stimProbePosition, requestedWindowChannels, ...
+    windowRelativePositions, windowChannels, deadWindowChannels, ...
+    liveContactCount, deadContactCount, evaluatedPairCount, ...
+    allowDeadChannels, ...
+    channelCenter, channelScale, conditionCount, ...
     conditionCountByCue, minimumTrialCount, numSplits, ...
     pairRelativePositions, pairDistanceSquared, distanceMatrixSquared, ...
     windowDiameterSquared, windowDiameter, ...
@@ -202,8 +236,11 @@ audit = table(tableRow, monkey, recordingDate, roi, candidateMask, ...
     maxStimDistanceRelativePosition, cacheFile, status, message, ...
     'VariableNames', {'TableRow', 'Monkey', 'Date', 'ROI', ...
     'CandidateForAnalysis', 'StimChannel', 'StimProbePosition', ...
-    'WindowRelativePositions', 'WindowChannels', 'ChannelZCenter', ...
-    'ChannelZScale', 'ConditionCount', 'ConditionCountByCue', ...
+    'RequestedWindowChannels', 'WindowRelativePositions', ...
+    'WindowChannels', 'DeadWindowChannels', 'LiveContactCount', ...
+    'DeadContactCount', 'EvaluatedPairCount', 'AllowDeadChannels', ...
+    'ChannelZCenter', 'ChannelZScale', 'ConditionCount', ...
+    'ConditionCountByCue', ...
     'MinimumTrialCount', 'NumSplits', 'PairRelativePositions', ...
     'PairDistanceSquared', 'DistanceMatrixSquared', ...
     'WindowDiameterSquared', 'WindowDiameter', ...
@@ -214,7 +251,7 @@ audit = table(tableRow, monkey, recordingDate, roi, candidateMask, ...
     'MaxStimDistanceSquared', 'MaxStimDistanceRelativePosition', ...
     'CacheFile', 'Status', 'Message'});
 audit.Properties.Description = ...
-    "Cross-validated full Quick-task tuning diameter across a complete physical-contact window.";
+    "Cross-validated full Quick-task tuning diameter across live contacts in a complete physical-position window.";
 end
 
 

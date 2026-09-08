@@ -1,7 +1,16 @@
 % Generate one recording-location PNG for every Clay stimulation session
 % included by the current analysis criteria.
 
-output_dir = 'C:\EM\RecordingLocationPlots\Clay';
+if ~exist('claySessionOutputDir', 'var'), claySessionOutputDir = ''; end
+if ~exist('claySessionDotSize', 'var'), claySessionDotSize = 15; end
+if ~exist('claySessionDotColors', 'var')
+    claySessionDotColors = [0.00, 0.45, 0.95; 0.00, 0.70, 0.20];
+end
+if strlength(string(claySessionOutputDir)) == 0
+    output_dir = 'C:\EM\RecordingLocationPlots\Clay';
+else
+    output_dir = char(string(claySessionOutputDir));
+end
 workbook_path = 'P:\Clay\NeuroData\RecordingRecord_Stimulation.xlsx';
 script_dir = fileparts(mfilename('fullpath'));
 addpath(script_dir);
@@ -24,9 +33,26 @@ recording_dates = normalizeDateColumnLocal(getTableColumnLocal(tb, 'Date'));
 roi_values = normalizeTextColumnLocal(getTableColumnLocal(tb, 'ROI'));
 [row_indices, inclusion_audit] = getWorkbookRowsFromUnitTableGof(tb, 'Clay');
 
-if exist('workbookRowsToPlot', 'var') && ~isempty(workbookRowsToPlot)
+full_session_generation = ~exist('workbookRowsToPlot', 'var') || ...
+    isempty(workbookRowsToPlot);
+if ~full_session_generation
     requested_table_rows = workbookRowsToPlot(:) - 1;
-    row_indices = row_indices(ismember(row_indices, requested_table_rows));
+    selection_mask = ismember(row_indices, requested_table_rows);
+    row_indices = row_indices(selection_mask);
+    vector_fields = {'Keys', 'AnalysisROI', 'AnalysisDates', ...
+        'WorkbookROI', 'UsedDateOnlyFallback'};
+    for field_idx = 1:numel(vector_fields)
+        field_name = vector_fields{field_idx};
+        inclusion_audit.(field_name) = ...
+            inclusion_audit.(field_name)(selection_mask);
+    end
+    inclusion_audit.SessionCount = numel(row_indices);
+    inclusion_audit.MTCount = nnz(inclusion_audit.AnalysisROI == "MT");
+    inclusion_audit.FSTCount = nnz(inclusion_audit.AnalysisROI == "FST");
+    inclusion_audit.WorkbookMTCount = nnz(inclusion_audit.WorkbookROI == "MT");
+    inclusion_audit.WorkbookFSTCount = nnz(inclusion_audit.WorkbookROI == "FST");
+    inclusion_audit.LabelMismatch = ...
+        inclusion_audit.AnalysisROI ~= inclusion_audit.WorkbookROI;
 elseif numel(row_indices) ~= 102
     error('Expected 102 unit_table_gof Clay sessions, but found %d.', numel(row_indices));
 end
@@ -47,7 +73,7 @@ for i = 1:numel(row_indices)
     fig = gobjects(0);
     try
         session_date = recording_dates(row_idx);
-        roi_label = char(inclusion_audit.AnalysisROI(i));
+        roi_label = char(inclusion_audit.WorkbookROI(i));
         hole = parseNumericVectorLocal(getValueAtRowLocal( ...
             getTableColumnLocal(tb, 'Hole'), row_idx));
         guide_tube_mm = parseScalarDoubleLocal(getValueAtRowLocal( ...
@@ -68,7 +94,8 @@ for i = 1:numel(row_indices)
         end
 
         total_depth_mm = guide_tube_mm + recording_depth_mm;
-        [image_slice, roi_slice, ml_index, depth_voxel] = prepareSessionPlotDataLocal( ...
+        [image_slice, roi_slice, ml_index, depth_voxel, ap_voxel] = ...
+            prepareSessionPlotDataLocal( ...
             struct_nii.img, roi_nii.img, OrigPoint_Voxel, hole, total_depth_mm, offset_mm);
 
         fig = figure('Color', 'w', 'Visible', 'off', 'Position', [100, 100, 1000, 800]);
@@ -83,7 +110,10 @@ for i = 1:numel(row_indices)
             h_roi = imshow(color_layer, 'InitialMagnification', 500);
             set(h_roi, 'AlphaData', 1 * slice_roi);
         end
-        scatter(ml_index, depth_voxel, 15, 'go', 'filled', 'MarkerEdgeColor', 'k');
+        area_idx = find(["MT", "FST"] == string(roi_label), 1, 'first');
+        scatter(ml_index, depth_voxel, claySessionDotSize, ...
+            claySessionDotColors(area_idx, :), 'filled', ...
+            'MarkerEdgeColor', 'k', 'LineWidth', 0.75);
         legend('off');
 
         [brain_rows, brain_cols] = find(image_slice ~= 255);
@@ -93,9 +123,10 @@ for i = 1:numel(row_indices)
             xlim([256 / 2, max(brain_cols)]);
         end
         ylim([min(brain_rows), max(brain_rows)]);
-        title(sprintf(['Clay %s | %s | Hole <%d,%d> | Guide %.2g + Depth %.3g mm ' ...
+        title(sprintf(['Clay %s | %s | AP voxel %d | Hole <%d,%d> | ' ...
+            'Guide %.2g + Depth %.3g mm ' ...
             '| Offset [%g,%g,%g] mm'], datestr(session_date, 'yyyy-mm-dd'), roi_label, ...
-            hole(1), hole(2), guide_tube_mm, recording_depth_mm, ...
+            ap_voxel, hole(1), hole(2), guide_tube_mm, recording_depth_mm, ...
             offset_mm(1), offset_mm(2), offset_mm(3)), ...
             'FontSize', 8, 'Interpreter', 'none');
         hold off;
@@ -132,14 +163,16 @@ fprintf('Successfully generated %d included-session plots in %s\n', ...
 
 % Remove obsolete generated session figures when an included session's ROI
 % label changes in the workbook. Preserve non-session files and subfolders.
-existing_plots = dir(fullfile(output_dir, 'Clay_*_Hole_*.png'));
-generated_files_lower = lower(generated_files);
 removed_count = 0;
-for i = 1:numel(existing_plots)
-    existing_file = string(fullfile(existing_plots(i).folder, existing_plots(i).name));
-    if ~any(lower(existing_file) == generated_files_lower)
-        delete(existing_file);
-        removed_count = removed_count + 1;
+if full_session_generation
+    existing_plots = dir(fullfile(output_dir, 'Clay_*_Hole_*.png'));
+    generated_files_lower = lower(generated_files);
+    for i = 1:numel(existing_plots)
+        existing_file = string(fullfile(existing_plots(i).folder, existing_plots(i).name));
+        if ~any(lower(existing_file) == generated_files_lower)
+            delete(existing_file);
+            removed_count = removed_count + 1;
+        end
     end
 end
 fprintf('Removed %d obsolete generated session plots.\n', removed_count);
@@ -226,9 +259,10 @@ else
 end
 end
 
-function [image_slice, roi_slice, ml_index, depth_voxel] = ...
+function [image_slice, roi_slice, ml_index, depth_voxel, ap_voxel] = ...
         prepareSessionPlotDataLocal(struct_volume, roi_volume, origin_voxel, hole, total_depth_mm, offset_mm)
-ap_voxel = origin_voxel(3) - ((29 - hole(2)) * 0.8) * 2;
+ap_voxel = origin_voxel(3) - ((29 - hole(2)) * 0.8) * 2 + ...
+    2 * offset_mm(2);
 ap_index = round(ap_voxel + 1);
 if ap_index < 1 || ap_index > size(struct_volume, 3)
     error('MRI slice index %d is outside the structural volume.', ap_index);
@@ -259,4 +293,5 @@ image_slice(image_slice == 0) = 255;
 
 roi_slice = double(roi_volume(:, :, ap_index));
 roi_slice = fliplr(imrotate(roi_slice, 90));
+ap_voxel = ap_index - 1;
 end

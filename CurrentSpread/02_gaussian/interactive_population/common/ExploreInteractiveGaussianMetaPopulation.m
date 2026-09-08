@@ -26,6 +26,15 @@ arguments
     options.SumFourCueR2 double = []
     options.ObjectiveLabel (1, 1) string = "Sum of four cue R^2"
     options.MarkerEdgeAlpha (1, 1) double = NaN
+    options.MarkerSize (1, 1) double ...
+        {mustBeGreaterThanOrEqual(options.MarkerSize, 8), ...
+        mustBeLessThanOrEqual(options.MarkerSize, 200)} = 42
+    options.MarkerEdgeWidth (1, 1) double ...
+        {mustBeGreaterThanOrEqual(options.MarkerEdgeWidth, 0.25), ...
+        mustBeLessThanOrEqual(options.MarkerEdgeWidth, 5)} = 1.25
+    options.MarkerFaceMode (1, 1) string ...
+        {mustBeMember(options.MarkerFaceMode, ["Color", "Grayscale"])} = ...
+        "Color"
     options.MarkerFaceAlphaFloor (1, 1) double = NaN
     options.MarkerFaceAlphaCeiling (1, 1) double ...
         {mustBeGreaterThanOrEqual(options.MarkerFaceAlphaCeiling, 0), ...
@@ -169,9 +178,9 @@ figureHandle = uifigure('Name', figureName, ...
     'Position', options.Position);
 mainGrid = uigridlayout(figureHandle, [2 2]);
 if options.ReserveSelectionRow
-    mainGrid.RowHeight = {'1x', 142};
+    mainGrid.RowHeight = {'1x', 208};
 else
-    mainGrid.RowHeight = {'1x', 108};
+    mainGrid.RowHeight = {'1x', 174};
 end
 mainGrid.ColumnWidth = {'3x', '1.15x'};
 mainGrid.Padding = [14 12 14 10];
@@ -249,15 +258,17 @@ statisticsArea = uitextarea(rightGrid, 'Editable', 'off', ...
     'BackgroundColor', [0.98 0.98 0.98]);
 
 if options.ReserveSelectionRow
-    controlGrid = uigridlayout(mainGrid, [3 4]);
-    controlGrid.RowHeight = {28, 30, 48};
+    controlGrid = uigridlayout(mainGrid, [4 4]);
+    controlGrid.RowHeight = {28, 26, 48, 84};
     labelRow = 2;
     sliderRow = 3;
+    appearanceRow = 4;
 else
-    controlGrid = uigridlayout(mainGrid, [2 4]);
-    controlGrid.RowHeight = {30, 48};
+    controlGrid = uigridlayout(mainGrid, [3 4]);
+    controlGrid.RowHeight = {26, 48, 84};
     labelRow = 1;
     sliderRow = 2;
+    appearanceRow = 3;
 end
 controlGrid.Layout.Row = 2;
 controlGrid.Layout.Column = [1 2];
@@ -291,10 +302,56 @@ tickIndices = unique(round(linspace(1, numSigmas, 9)));
 slider.MajorTicks = tickIndices;
 slider.MajorTickLabels = cellstr(compose('%.3g', sigmaValues(tickIndices)));
 
+appearanceGrid = uigridlayout(controlGrid, [1 4]);
+appearanceGrid.Layout.Row = appearanceRow;
+appearanceGrid.Layout.Column = [1 4];
+appearanceGrid.ColumnWidth = {'1x', '1x', '1x', 190};
+appearanceGrid.Padding = [0 0 0 0];
+appearanceGrid.ColumnSpacing = 14;
+
+[dotSizeGroup, dotSizeLabel] = makeAppearanceGroup( ...
+    appearanceGrid, 1, sprintf('Dot size: %.0f', options.MarkerSize));
+dotSizeSlider = uislider(dotSizeGroup, 'Limits', [8 200], ...
+    'Value', options.MarkerSize, ...
+    'MajorTicks', [8 50 100 150 200], ...
+    'Tooltip', 'Change the area of every population dot');
+dotSizeSlider.Layout.Row = 2;
+
+[edgeAlphaGroup, edgeAlphaLabel] = makeAppearanceGroup( ...
+    appearanceGrid, 2, sprintf( ...
+    'Edge transparency: %.2f', 1 - options.MarkerEdgeAlpha));
+edgeTransparencySlider = uislider(edgeAlphaGroup, 'Limits', [0 1], ...
+    'Value', 1 - options.MarkerEdgeAlpha, ...
+    'MajorTicks', [0 0.25 0.5 0.75 1], ...
+    'Tooltip', '0 is opaque; 1 is transparent');
+edgeTransparencySlider.Layout.Row = 2;
+
+[edgeWidthGroup, edgeWidthLabel] = makeAppearanceGroup( ...
+    appearanceGrid, 3, sprintf( ...
+    'Edge width: %.2f', options.MarkerEdgeWidth));
+edgeWidthSlider = uislider(edgeWidthGroup, 'Limits', [0.25 5], ...
+    'Value', options.MarkerEdgeWidth, ...
+    'MajorTicks', [0.25 1 2 3 4 5], ...
+    'Tooltip', 'Change the outline width of every population dot');
+edgeWidthSlider.Layout.Row = 2;
+
+[faceModeGroup, ~] = makeAppearanceGroup( ...
+    appearanceGrid, 4, 'Dot face fill');
+faceModeDropDown = uidropdown(faceModeGroup, ...
+    'Items', {'Condition color', 'Grayscale'}, ...
+    'ItemsData', {'Color', 'Grayscale'}, ...
+    'Value', char(options.MarkerFaceMode), ...
+    'Tooltip', 'Choose colored or grayscale dot faces');
+faceModeDropDown.Layout.Row = 2;
+
 hold(populationAxes, 'on');
 xPlot = linspace(-1, 1, 101);
 fitLines = gobjects(4, 1);
 scatterHandles = gobjects(4, 2);
+markerSize = options.MarkerSize;
+markerEdgeAlpha = options.MarkerEdgeAlpha;
+markerEdgeWidth = options.MarkerEdgeWidth;
+markerFaceMode = options.MarkerFaceMode;
 for initialCondition = 1:4
     fitLines(initialCondition) = plot( ...
         populationAxes, xPlot, nan(size(xPlot)), ...
@@ -303,23 +360,39 @@ for initialCondition = 1:4
         'DisplayName', conditionNames(initialCondition));
     for initialMonkey = 1:2
         scatterHandles(initialCondition, initialMonkey) = scatter( ...
-            populationAxes, nan, nan, 42, ...
+            populationAxes, nan, nan, markerSize, ...
             conditionColors(initialCondition, :), ...
             monkeyMarkers{initialMonkey}, 'filled', ...
             'MarkerEdgeColor', conditionColors(initialCondition, :), ...
-            'LineWidth', 1.25, 'HandleVisibility', 'off');
+            'LineWidth', markerEdgeWidth, 'HandleVisibility', 'off');
         scatterHandles(initialCondition, initialMonkey).MarkerFaceAlpha = 'flat';
         scatterHandles(initialCondition, initialMonkey).MarkerEdgeAlpha = ...
-            options.MarkerEdgeAlpha;
+            markerEdgeAlpha;
     end
 end
-jimLegend = scatter(populationAxes, nan, nan, 42, 'k', 'o', 'filled', ...
+jimLegend = scatter(populationAxes, nan, nan, markerSize, 'k', 'o', 'filled', ...
     'DisplayName', 'Jim');
-clayLegend = scatter(populationAxes, nan, nan, 42, 'k', 'd', 'filled', ...
+clayLegend = scatter(populationAxes, nan, nan, markerSize, 'k', 'd', 'filled', ...
     'DisplayName', 'Clay');
 legend(populationAxes, [fitLines; jimLegend; clayLegend], ...
     [cellstr(conditionNames); {'Jim'; 'Clay'}], ...
     'Location', 'eastoutside');
+
+dotSizeSlider.ValueChangingFcn = @(~, event) ...
+    setDotSize(event.Value);
+dotSizeSlider.ValueChangedFcn = @(~, event) ...
+    setDotSize(event.Value);
+edgeTransparencySlider.ValueChangingFcn = @(~, event) ...
+    setEdgeTransparency(event.Value);
+edgeTransparencySlider.ValueChangedFcn = @(~, event) ...
+    setEdgeTransparency(event.Value);
+edgeWidthSlider.ValueChangingFcn = @(~, event) ...
+    setEdgeWidth(event.Value);
+edgeWidthSlider.ValueChangedFcn = @(~, event) ...
+    setEdgeWidth(event.Value);
+faceModeDropDown.ValueChangedFcn = @(source, ~) ...
+    setFaceMode(string(source.Value));
+applyMarkerStyle();
 
 lastIndex = NaN;
 slider.ValueChangingFcn = @(~, event) updateDisplay(round(event.Value));
@@ -341,10 +414,95 @@ app.ObjectiveValues = objectiveValues;
 app.MetricPerCue = metricPerCue;
 app.SumFourCueR2 = objectiveValues;
 app.MetricPerCueR2 = metricPerCue;
+app.DotSizeSlider = dotSizeSlider;
+app.EdgeTransparencySlider = edgeTransparencySlider;
+app.EdgeWidthSlider = edgeWidthSlider;
+app.FaceModeDropDown = faceModeDropDown;
+app.GetDisplaySettings = @getDisplaySettings;
 app.AllCueBestIndex = allCueBestIndex;
 app.AllCueBestSigma = allCueBestSigma;
 app.AllCueBestValue = allCueBestValue;
 app.AllCueOptimalCursor = optimalCursor;
+
+    function settings = getDisplaySettings()
+        settings = struct( ...
+            'MarkerSize', markerSize, ...
+            'MarkerEdgeAlpha', markerEdgeAlpha, ...
+            'MarkerEdgeWidth', markerEdgeWidth, ...
+            'MarkerFaceMode', markerFaceMode);
+    end
+
+    function setDotSize(value)
+        markerSize = max(8, min(200, double(value)));
+        dotSizeLabel.Text = sprintf('Dot size: %.0f', markerSize);
+        for condition = 1:4
+            for monkey = 1:2
+                scatterHandles(condition, monkey).SizeData = markerSize;
+            end
+        end
+        jimLegend.SizeData = markerSize;
+        clayLegend.SizeData = markerSize;
+        drawnow limitrate nocallbacks
+    end
+
+    function setEdgeTransparency(value)
+        transparency = max(0, min(1, double(value)));
+        markerEdgeAlpha = 1 - transparency;
+        edgeAlphaLabel.Text = sprintf( ...
+            'Edge transparency: %.2f', transparency);
+        for condition = 1:4
+            for monkey = 1:2
+                scatterHandles(condition, monkey).MarkerEdgeAlpha = ...
+                    markerEdgeAlpha;
+            end
+        end
+        jimLegend.MarkerEdgeAlpha = markerEdgeAlpha;
+        clayLegend.MarkerEdgeAlpha = markerEdgeAlpha;
+        drawnow limitrate nocallbacks
+    end
+
+    function setEdgeWidth(value)
+        markerEdgeWidth = max(0.25, min(5, double(value)));
+        edgeWidthLabel.Text = sprintf( ...
+            'Edge width: %.2f', markerEdgeWidth);
+        for condition = 1:4
+            for monkey = 1:2
+                scatterHandles(condition, monkey).LineWidth = ...
+                    markerEdgeWidth;
+            end
+        end
+        jimLegend.LineWidth = markerEdgeWidth;
+        clayLegend.LineWidth = markerEdgeWidth;
+        drawnow limitrate nocallbacks
+    end
+
+    function setFaceMode(value)
+        markerFaceMode = validatestring(value, ["Color", "Grayscale"]);
+        markerFaceMode = string(markerFaceMode);
+        applyMarkerStyle();
+        drawnow limitrate nocallbacks
+    end
+
+    function applyMarkerStyle()
+        for condition = 1:4
+            faceColor = conditionColors(condition, :);
+            if markerFaceMode == "Grayscale"
+                luminance = faceColor * [0.2126; 0.7152; 0.0722];
+                faceColor = repmat(luminance, 1, 3);
+            end
+            for monkey = 1:2
+                set(scatterHandles(condition, monkey), ...
+                    'CData', faceColor, 'MarkerFaceColor', 'flat', ...
+                    'SizeData', markerSize, ...
+                    'MarkerEdgeAlpha', markerEdgeAlpha, ...
+                    'LineWidth', markerEdgeWidth);
+            end
+        end
+        set([jimLegend, clayLegend], ...
+            'SizeData', markerSize, ...
+            'MarkerEdgeAlpha', markerEdgeAlpha, ...
+            'LineWidth', markerEdgeWidth);
+    end
 
     function updateDisplay(index)
         index = max(1, min(numSigmas, round(index)));
@@ -362,7 +520,7 @@ app.AllCueOptimalCursor = optimalCursor;
                 y = double(cache.PointBias(valid, displayCondition, index));
                 alpha = od(valid);
                 if isCorrelationOD
-                    alpha = alpha ./ 2;
+                    alpha = 1 - exp(-alpha);
                 end
                 alpha = min(max(alpha, 0), 1);
                 alpha = options.MarkerFaceAlphaFloor + ...
@@ -489,6 +647,19 @@ app.AllCueOptimalCursor = optimalCursor;
                 "Merged-eye summary is not reported for meta 3D sessions."];
         end
     end
+end
+
+
+function [group, label] = makeAppearanceGroup(parent, column, labelText)
+group = uigridlayout(parent, [2 1]);
+group.Layout.Row = 1;
+group.Layout.Column = column;
+group.RowHeight = {22, '1x'};
+group.Padding = [5 0 5 0];
+group.RowSpacing = 2;
+label = uilabel(group, 'Text', labelText, ...
+    'FontWeight', 'bold', 'HorizontalAlignment', 'center');
+label.Layout.Row = 1;
 end
 
 

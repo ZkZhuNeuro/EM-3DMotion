@@ -3,7 +3,28 @@
 % separate MT and FST figures. This includes MRI slices that fall between
 % two grid rows.
 
-output_dir = 'C:\EM\RecordingLocationPlots\Clay\ProjectedByY';
+if ~exist('clayCoronalTargetAPVoxels', 'var'), clayCoronalTargetAPVoxels = []; end
+if ~exist('clayCoronalOutputDir', 'var'), clayCoronalOutputDir = ''; end
+if ~exist('clayCoronalDotColors', 'var'), clayCoronalDotColors = [0 1 0; 0 1 0]; end
+if ~exist('clayCoronalDotSize', 'var'), clayCoronalDotSize = 20; end
+if ~exist('clayCoronalXLimits', 'var'), clayCoronalXLimits = []; end
+if ~exist('clayCoronalYLimits', 'var'), clayCoronalYLimits = []; end
+if ~exist('clayCoronalShowTitle', 'var'), clayCoronalShowTitle = true; end
+if ~exist('clayCoronalVectorROIs', 'var'), clayCoronalVectorROIs = false; end
+if ~exist('clayCoronalExportPDF', 'var'), clayCoronalExportPDF = false; end
+if ~exist('clayCoronalCombinedPDF', 'var'), clayCoronalCombinedPDF = ''; end
+if ~exist('clayCoronalFilenameSuffix', 'var'), clayCoronalFilenameSuffix = ''; end
+if ~exist('clayCoronalExportDimensionsPoints', 'var')
+    clayCoronalExportDimensionsPoints = [];
+end
+if ~exist('clayCoronalRasterDimensionsPixels', 'var')
+    clayCoronalRasterDimensionsPixels = [];
+end
+if strlength(string(clayCoronalOutputDir)) == 0
+    output_dir = 'C:\EM\RecordingLocationPlots\Clay\ProjectedByY';
+else
+    output_dir = char(string(clayCoronalOutputDir));
+end
 workbook_path = 'P:\Clay\NeuroData\RecordingRecord_Stimulation.xlsx';
 script_dir = fileparts(mfilename('fullpath'));
 addpath(script_dir);
@@ -46,7 +67,7 @@ for i = 1:n_recordings
     offsets_mm(i, :) = parseNumericVectorLocal(getValueAtRowLocal(offset_column, row_idx));
     guide_mm(i) = parseScalarDoubleLocal(getValueAtRowLocal(guide_column, row_idx));
     depth_mm(i) = parseScalarDoubleLocal(getValueAtRowLocal(depth_column, row_idx));
-    included_roi(i) = inclusion_audit.AnalysisROI(i);
+    included_roi(i) = inclusion_audit.WorkbookROI(i);
 end
 
 if any(~isfinite(holes), 'all') || any(~isfinite(offsets_mm), 'all') || ...
@@ -72,9 +93,20 @@ visibility_cleanup = onCleanup(@() set(groot, 'defaultFigureVisible', old_visibi
 set(groot, 'defaultFigureVisible', 'off');
 
 areas = ["MT", "FST"];
+if ~isempty(clayCoronalTargetAPVoxels)
+    assert(numel(clayCoronalTargetAPVoxels) == numel(areas), ...
+        'clayCoronalTargetAPVoxels must provide one AP voxel per area.');
+    clayCoronalTargetAPVoxels = round(clayCoronalTargetAPVoxels(:).');
+end
+assert(isequal(size(clayCoronalDotColors), [2, 3]), ...
+    'clayCoronalDotColors must be a 2-by-3 [MT; FST] RGB matrix.');
 generated_count = 0;
 generated_files = strings(numel(all_ap_voxels) * numel(areas), 1);
 for ap_voxel = all_ap_voxels
+    if ~isempty(clayCoronalTargetAPVoxels) && ...
+            ~any(clayCoronalTargetAPVoxels == ap_voxel)
+        continue;
+    end
     [image_slice, roi_slice] = prepareCoronalSliceLocal( ...
         struct_nii.img, roi_nii.img, ap_voxel);
     [brain_rows, brain_cols] = find(image_slice ~= 255);
@@ -93,7 +125,12 @@ for ap_voxel = all_ap_voxels
         filename_context = sprintf('BetweenY%02d-Y%02d', posterior_y, anterior_y);
     end
 
-    for area = areas
+    for area_idx = 1:numel(areas)
+        area = areas(area_idx);
+        if ~isempty(clayCoronalTargetAPVoxels) && ...
+                ap_voxel ~= clayCoronalTargetAPVoxels(area_idx)
+            continue;
+        end
         % The Y row selects the coronal MRI slice only. Project every
         % analysis-included recording from the requested area onto it.
         area_mask = included_roi == area;
@@ -106,57 +143,121 @@ for ap_voxel = all_ap_voxels
         fig = figure('Color', 'w', 'Visible', 'off', 'Position', [100, 100, 1000, 800]);
         imshow(image_slice, 'InitialMagnification', 1000);
         hold on;
-        for r = 1:length(ROI_intensity)
-            slice_roi = roi_slice == ROI_intensity(r);
-            color_layer = cat(3, ...
-                ones(size(image_slice)) .* color_mat(r, 1), ...
-                ones(size(image_slice)) .* color_mat(r, 2), ...
-                ones(size(image_slice)) .* color_mat(r, 3));
-            h_roi = imshow(color_layer, 'InitialMagnification', 500);
-            set(h_roi, 'AlphaData', 1 * slice_roi);
+        if clayCoronalVectorROIs
+            overlayROIsVectorLocal(roi_slice, ROI_intensity, color_mat);
+        else
+            for r = 1:length(ROI_intensity)
+                slice_roi = roi_slice == ROI_intensity(r);
+                color_layer = cat(3, ...
+                    ones(size(image_slice)) .* color_mat(r, 1), ...
+                    ones(size(image_slice)) .* color_mat(r, 2), ...
+                    ones(size(image_slice)) .* color_mat(r, 3));
+                h_roi = imshow(color_layer, 'InitialMagnification', 500);
+                set(h_roi, 'AlphaData', 1 * slice_roi);
+            end
         end
 
         if ~isempty(ml_index)
-            scatter(ml_index, depth_voxel, 20, [0 1 0], 'filled', ...
+            scatter(ml_index, depth_voxel, clayCoronalDotSize, ...
+                clayCoronalDotColors(area_idx, :), 'filled', ...
                 'MarkerEdgeColor', 'k', 'LineWidth', 0.75);
         end
 
         legend('off');
-        xlim([min(brain_cols), 256 / 2]);
-        ylim([min(brain_rows), max(brain_rows)]);
-        title({sprintf('Clay %s | MRI slice index %d (AP voxel %d)', ...
-            area, ap_voxel + 1, ap_voxel), ...
-            sprintf('%s | all %d included locations', slice_context, nnz(area_mask))}, ...
-            'FontSize', 8, 'Interpreter', 'none');
+        if isempty(clayCoronalXLimits)
+            xlim([min(brain_cols), 256 / 2]);
+        else
+            assert(numel(clayCoronalXLimits) == 2 && ...
+                all(isfinite(clayCoronalXLimits)) && ...
+                diff(clayCoronalXLimits) > 0, ...
+                'clayCoronalXLimits must contain increasing finite limits.');
+            assert(all(ml_index >= clayCoronalXLimits(1) & ...
+                ml_index <= clayCoronalXLimits(2)), ...
+                'Requested coronal x crop excludes at least one plotted location.');
+            xlim(clayCoronalXLimits);
+        end
+        if isempty(clayCoronalYLimits)
+            ylim([min(brain_rows), max(brain_rows)]);
+        else
+            assert(numel(clayCoronalYLimits) == 2 && ...
+                all(isfinite(clayCoronalYLimits)) && ...
+                diff(clayCoronalYLimits) > 0, ...
+                'clayCoronalYLimits must contain increasing finite limits.');
+            assert(all(depth_voxel >= clayCoronalYLimits(1) & ...
+                depth_voxel <= clayCoronalYLimits(2)), ...
+                'Requested coronal y crop excludes at least one plotted location.');
+            ylim(clayCoronalYLimits);
+        end
+        if clayCoronalShowTitle
+            title({sprintf('Clay %s | MRI slice index %d (AP voxel %d)', ...
+                area, ap_voxel + 1, ap_voxel), ...
+                sprintf('%s | all %d included locations', slice_context, nnz(area_mask))}, ...
+                'FontSize', 8, 'Interpreter', 'none');
+        end
         hold off;
 
-        output_name = sprintf('Clay_%s_APVoxel%03d_%s_ProjectedLocations.png', ...
-            area, ap_voxel, filename_context);
+        output_name = sprintf('Clay_%s_APVoxel%03d_%s_ProjectedLocations%s.png', ...
+            area, ap_voxel, filename_context, ...
+            char(string(clayCoronalFilenameSuffix)));
         output_file = fullfile(output_dir, output_name);
-        exportgraphics(fig, output_file, 'Resolution', 300);
+        export_options = coronalExportOptionsLocal( ...
+            clayCoronalExportDimensionsPoints, false);
+        exportgraphics(fig, output_file, export_options{:});
+        if ~isempty(clayCoronalRasterDimensionsPixels)
+            normalizeRasterCanvasLocal(output_file, ...
+                clayCoronalRasterDimensionsPixels);
+        end
+        if clayCoronalExportPDF
+            pdf_file = replace(output_file, '.png', '.pdf');
+            export_options = coronalExportOptionsLocal( ...
+                clayCoronalExportDimensionsPoints, true);
+            exportgraphics(fig, pdf_file, export_options{:});
+        end
+        if strlength(string(clayCoronalCombinedPDF)) > 0
+            combined_pdf = char(string(clayCoronalCombinedPDF));
+            combined_dir = fileparts(combined_pdf);
+            if ~exist(combined_dir, 'dir'), mkdir(combined_dir); end
+            export_options = coronalExportOptionsLocal( ...
+                clayCoronalExportDimensionsPoints, true);
+            exportgraphics(fig, combined_pdf, export_options{:}, ...
+                'Append', generated_count > 0);
+        end
         close(fig);
         generated_count = generated_count + 1;
         generated_files(generated_count) = string(output_file);
     end
-    fprintf('Generated MT and FST projections for AP voxel %d (%s).\n', ...
-        ap_voxel, slice_context);
+    if isempty(clayCoronalTargetAPVoxels)
+        generated_areas = areas;
+    else
+        generated_areas = areas(clayCoronalTargetAPVoxels == ap_voxel);
+    end
+    fprintf('Generated %s projection(s) for AP voxel %d (%s).\n', ...
+        strjoin(cellstr(generated_areas), ' and '), ap_voxel, slice_context);
 end
 
-expected_count = numel(all_ap_voxels) * numel(areas);
+if isempty(clayCoronalTargetAPVoxels)
+    expected_count = numel(all_ap_voxels) * numel(areas);
+else
+    expected_count = numel(areas);
+end
 if generated_count ~= expected_count
     error('Expected %d projected plots, but generated %d.', expected_count, generated_count);
 end
 
 % Remove older generated projections that are no longer part of the current
 % consecutive-slice series.
-existing_plots = dir(fullfile(output_dir, 'Clay_*_ProjectedLocations.png'));
-generated_files_lower = lower(generated_files);
 removed_count = 0;
-for i = 1:numel(existing_plots)
-    existing_file = string(fullfile(existing_plots(i).folder, existing_plots(i).name));
-    if ~any(lower(existing_file) == generated_files_lower)
-        delete(existing_file);
-        removed_count = removed_count + 1;
+if isempty(clayCoronalTargetAPVoxels)
+    existing_plots = dir(fullfile(output_dir, sprintf( ...
+        'Clay_*_ProjectedLocations%s.png', ...
+        char(string(clayCoronalFilenameSuffix)))));
+    generated_files_lower = lower(generated_files);
+    for i = 1:numel(existing_plots)
+        existing_file = string(fullfile(existing_plots(i).folder, existing_plots(i).name));
+        if ~any(lower(existing_file) == generated_files_lower)
+            delete(existing_file);
+            removed_count = removed_count + 1;
+        end
     end
 end
 
@@ -281,4 +382,59 @@ for i = 1:n
     depth_voxel(i) = 256 - (origin_voxel(2) - 2 * total_depth_mm(i)) + ...
         2 * offsets_mm(i, 3);
 end
+end
+
+function overlayROIsVectorLocal(roi_slice, roi_intensity, color_mat)
+for r = 1:length(roi_intensity)
+    [rows, cols] = find(roi_slice == roi_intensity(r));
+    if isempty(rows), continue; end
+    x_vertices = [cols.' - 0.5; cols.' + 0.5; cols.' + 0.5; cols.' - 0.5];
+    y_vertices = [rows.' - 0.5; rows.' - 0.5; rows.' + 0.5; rows.' + 0.5];
+    patch(x_vertices, y_vertices, color_mat(r, :), ...
+        'EdgeColor', 'none', 'FaceAlpha', 1);
+end
+end
+
+function options = coronalExportOptionsLocal(dimensions_points, vector_output)
+if vector_output
+    options = {'ContentType', 'vector'};
+else
+    options = {'Resolution', 300};
+end
+if ~isempty(dimensions_points)
+    if vector_output
+        export_dimensions = dimensions_points;
+        export_units = 'points';
+    else
+        export_dimensions = round(dimensions_points .* 300 ./ 72);
+        export_units = 'pixels';
+    end
+    options = [options, {'Width', export_dimensions(1), ...
+        'Height', export_dimensions(2), 'Units', export_units, ...
+        'Padding', 0, 'PreserveAspectRatio', 'on'}];
+end
+end
+
+function normalizeRasterCanvasLocal(file_path, target_dimensions)
+image_data = imread(file_path);
+source_height = size(image_data, 1);
+source_width = size(image_data, 2);
+target_width = round(target_dimensions(1));
+target_height = round(target_dimensions(2));
+assert(source_width <= target_width && source_height <= target_height, ...
+    'Exported PNG is larger than its requested normalized canvas.');
+if source_width == target_width && source_height == target_height
+    return;
+end
+if isfloat(image_data)
+    white_value = cast(1, 'like', image_data);
+else
+    white_value = intmax(class(image_data));
+end
+canvas = repmat(white_value, target_height, target_width, size(image_data, 3));
+row_start = floor((target_height - source_height) / 2) + 1;
+col_start = floor((target_width - source_width) / 2) + 1;
+canvas(row_start:(row_start + source_height - 1), ...
+    col_start:(col_start + source_width - 1), :) = image_data;
+imwrite(canvas, file_path);
 end

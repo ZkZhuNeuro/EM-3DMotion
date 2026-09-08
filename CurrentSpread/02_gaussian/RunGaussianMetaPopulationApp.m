@@ -1,4 +1,4 @@
-%% Unified Max-OD Gaussian-meta population app
+%% Unified Max-OD Gaussian channel-prediction and legacy meta app
 
 clear; close all
 scriptFolder = fileparts(mfilename('fullpath'));

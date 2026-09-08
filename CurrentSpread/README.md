@@ -64,14 +64,21 @@ the complete physical contact window `-4:4` for MT and FST sessions classified
 as 2D at the stimulation channel. It calculates all 36 cross-validated pair
 distances among the nine contacts and defines the window diameter as their
 maximum. The stimulation-channel cohort also requires the source MonoL and
-MonoR `p_AI < 0.05` gate. All nine contacts must exist, be live, and contain
-common-valid Quick-task trials. The default outputs are written beneath
+MonoR `p_AI < 0.05` gate. All nine physical positions must exist on the probe.
+Dead non-stimulation contacts inside the window are skipped rather than
+excluding the session; the audit records the live-contact and evaluated-pair
+counts. At least two contacts, including the stimulation contact, must be live
+and contain common-valid Quick-task trials. The default outputs are written beneath
 `C:\EM\StimTuningAnalysis`, including an MT/FST overlaid probability histogram,
 session audit, all pair distances, diameter-pair span summary, and MAT result:
 
 ```matlab
 analysis = RunQuickTuningWindowDiameterStim2D;
 ```
+
+Use `RelativePositions=-2:2` with a separate output folder to run the same
+analysis on a five-position window while preserving the default `-4:4`
+artifacts.
 
 ## Inputs and outputs
 
@@ -404,28 +411,78 @@ The interactive population implementation is organized under
 `02_gaussian/interactive_population`:
 
 - `common`: area-specific cache generation and the shared slider viewer;
+- `channel_prediction`: channel-first behavioral prediction and its viewer;
 - `cv_ai_od`: repeated-CV `DeltaBias ~ AI + AI:OD` objective and viewers;
 - `ordinary_ai_od`: full-sample ordinary-R-squared objective and viewers;
 - `type2_distance`: distance-to-displayed-Type-II-line objective and viewers.
 
 `BuildInteractiveGaussianMetaPopulationCache.m` supports `Area="MT"` or
 `Area="FST"` and precomputes 1,000 logarithmically spaced sigma values from
-0.01 to 100. Each Quick session is loaded only once. At every sigma, AI is
-rebuilt from channel-standardized Gaussian meta tuning, while signed OD,
-dominant-eye cue ordering, and 2D/3D class are rebuilt from the matching raw-FR
-meta tuning. The default cohort uses the current workbook-refreshed GOF table
-without adjacent-channel discontinuity exclusions. Each cache contains both
-meta-2D and meta-3D point-validity arrays and population statistics.
+0.01 to 100. Each Quick session is loaded only once. Away from the
+stimulation-channel endpoint, AI is rebuilt from channel-standardized Gaussian
+meta tuning, while signed OD, dominant-eye cue ordering, and 2D/3D class are
+rebuilt from the matching raw-FR meta tuning. At `sigma = 0.01`, the cache is
+anchored to the population pathway's exact fixed-`StimElec` values: stored AI,
+OD calculated from `tuning_mean(:, :, StimElec)`, and stored `Z3D_v_Z2D`.
+The builder asserts equality of the endpoint cohort and cue-valid point counts.
+To preserve source-row identity with `OD_Analysis`, the default cohort loads
+the supplied GOF MAT artifact unchanged and does not refresh it from recording
+workbooks; `RefreshFromWorkbooks=true` remains available as an explicit
+override. Adjacent-channel discontinuity exclusions are not applied by
+default. Each cache contains both meta-2D and meta-3D point-validity arrays and
+population statistics.
+
+The cache also stores a non-meta, channel-first representation. A neuron/site
+is included only when its source `unit_table_gof.p_AI(2)` (MonoL) and
+`p_AI(3)` (MonoR) are both finite and below 0.05. These source tests govern the
+stimulation contact; every contributing neighboring contact must separately
+pass its own raw Quick-task MonoL and MonoR direction-tuning tests. Channels
+must also be live and have a finite predictor, position, and nonzero signed OD.
+Each eligible channel retains its own AI and signed OD. The default model uses
+each channel's **dominant-eye
+AI multiplied by absolute local OD** to predict every behavioral condition c
+(Dominant, Combined, Stereo, NonDominant). The dominant physical eye is chosen
+independently for each channel from the sign of that channel's OD:
+
+`channel bias(c) = beta0(c) + beta1(c)*AI_dominant*abs(OD)`.
+
+The predicted channel biases are then averaged with Gaussian weights centered
+on `StimElec`, renormalized over the eligible channels in that session. For
+every candidate sigma, ordinary least squares independently fits an intercept
+and slope for each cue (eight coefficients total). These coefficients are
+shared across channels and sessions within each cue. The four fits use all
+valid observations without cross-validation. OD is already embedded in the
+single predictor; there is no separate OD coefficient or AI-by-OD interaction.
+Sigma maximizes the unweighted sum of the four centered ordinary R-squared
+values: `sum_c (1-SSE_c/SST_c)`. All four conditions must have finite R2.
+The observed behavioral Dom/NonDom targets are assigned once by the signed OD
+of the stimulation channel, independent of sigma. Source physical cue indices
+are retained in the observation audit; the per-channel audit records whether
+MonoL or MonoR supplied the locally dominant AI. The
+2D/3D selector for this model uses the stored
+stimulation-channel `Z3D_v_Z2D` sign; it does not construct a meta tuning curve.
+Ordinary fits and stimulation-only CV comparisons use the same shared neuron
+selector, including the source both-eye gate, a valid behavioral fit, and a
+unique live stimulation contact with finite predictor. A significant neighbor
+cannot admit a nonsignificant stimulation neuron. With the current source file,
+the Max-OD analysis includes **63 MT 2D sites and 30 FST 3D sites** in both fits.
+Recomputed stimulation-contact p-values can disagree with the source table;
+they are retained for audit but do not replace its `p_AI`. The neuron audit
+reports both sets of tests and every exclusion reason; the channel-weight audit
+records the p-value source for each contributing channel. Cache schema 6 stores
+source p-values explicitly; older caches read them from their original
+`StateFile` after source-row identity checks.
 
 The cache accepts `ODDefinition="Max"` (the default) or
 `ODDefinition="Correlation"`. Correlation OD is
-`PearsonR(Combined,MonoL) - PearsonR(Combined,MonoR)` on the common finite
-coherence support. Its sign controls dominant-eye cue ordering and the
+`atanh(PearsonR(Combined,MonoL)) - atanh(PearsonR(Combined,MonoR))` on the
+common finite coherence support, matching the Fisher-Z correlation method in
+`OD_Analysis`. Its sign controls dominant-eye cue ordering and the
 dominant-curve choice for 2D/3D classification; its absolute value controls OD
 weighting and marker opacity. Correlation-OD caches are kept separate under
 `InteractiveGaussianMetaPopulation\CorrelationOD\<Area>`.
-Correlation-OD viewers use `MarkerFaceAlpha = min(abs(OD)/2, 1)` because the
-correlation-OD range is [-2, 2], and use 0.95 edge opacity. Max-OD viewers retain
+Correlation-OD viewers use `MarkerFaceAlpha = 1-exp(-abs(OD))`, matching the
+Fisher-Z population figures, and use 0.95 edge opacity. Max-OD viewers retain
 the original `MarkerFaceAlpha = abs(OD)` mapping and 0.85 edge opacity.
 
 Use the two top-level apps instead of method-specific launcher lists:
@@ -434,19 +491,155 @@ Use the two top-level apps instead of method-specific launcher lists:
 - `RunGaussianMetaPopulationCorrelationODApp.m` opens the separate
   correlation-OD app.
 
-Each app provides dropdowns for area (MT/FST), meta-derived population
-(2D/3D), and optimization method (CV AI+AI:OD, ordinary AI+AI:OD, or Type-II
-distance). Changing a dropdown replaces the displayed cached view. If a cache
-or objective is missing or older than its cache, the app builds the complete
-area-specific 2D/3D suite automatically. Older one-method launchers are retained
-under `interactive_population/legacy_launchers` only for compatibility.
+Each app provides dropdowns for area (MT/FST), stimulation-channel population
+(2D/3D), and optimization method. It opens on the channel-first ordinary R2
+view, which overlays Dominant, Combined, Stereo, and NonDominant fitted
+predicted versus observed biases in one upper-left population plot. It uses
+the same condition colors, Jim/Clay markers, bottom sigma slider and appearance
+controls as the legacy viewers. The Gaussian profile, condition-wise ordinary R2,
+and statistics are on the right. Dot opacity uses stimulation-channel |OD|.
+Sigma is selected by maximum summed ordinary R2. The earlier meta-tuning CV,
+ordinary, and Type-II-distance views remain available for comparison. Changing
+a dropdown replaces the displayed cached view. If a cache or objective is
+missing, stale, or predates the channel-first inputs, the app rebuilds the
+requested channel-first objective from the existing neural cache when possible;
+it does not refit the other three methods for this update. The dominant-AI×OD
+ordinary calculation has objective schema 5 and output folders named
+`<Area>\<UnitType>\ChannelFirstBiasPrediction_DominantAIxOD_OrdinaryR2_SourceStimBothEyes`.
+Earlier result folders are preserved as historical outputs, not used by the app.
+The earlier Combined-AI calculation remains available by passing
+`PredictorMode="CombinedAI"` explicitly.
+The previous channel-first cue-specific AI + AI:OD CV model remains callable
+with `BuildGaussianChannelBiasPredictionObjective(FitMethod="CV", ...)` and
+uses `ChannelFirstBiasPrediction_DomNonDom_SourceStimBothEyes` for newly gated fits.
+
+`RunGaussianCombinedAIStimChannelCVComparison` now defaults to testing whether
+Gaussian pooling of **dominant-eye AI×|OD|** improves prediction over the same
+predictor at the stimulation channel alone. Pass `PredictorMode="CombinedAI"`
+to reproduce the earlier Combined-AI comparison.
+Both models fit an intercept and slope separately for each behavioral cue
+(eight betas). The baseline uses the actual `StimChannel` contact with a
+literal weight of one; it does not use a small-sigma approximation or replace
+an unavailable stimulation contact with a neighbor. Both models use the same
+sessions as the ordinary fit, whose stimulation neuron passes both source-eye
+tests and has a live, finite stimulation-channel predictor. Session inclusions
+and exclusions are exported for audit.
+
+The default evaluation uses five session folds repeated five times. The
+Gaussian model selects sigma by five-fold inner CV using only the outer
+training sessions. The stimulation-only model has no sigma to select; its
+cue-specific betas are fitted on the same outer training sessions. Paired
+outer-fold error differences use the same variance-corrected test described
+below, with positive differences favoring Gaussian pooling. Results default
+to `<Area>\<UnitType>\DominantAIxOD_GaussianVsStimOnly_CV_SourceStimBothEyes` under `C:\EM`.
+
+```matlab
+addpath('02_gaussian/interactive_population/channel_prediction');
+analysis = RunGaussianCombinedAIStimChannelCVComparison;
+```
+
+To evaluate split robustness with 100 repeats of the five-fold **outer** CV
+(500 paired outer-test evaluations), retaining five-fold inner CV for sigma:
+
+```matlab
+analysis = RunGaussianCombinedAIStimChannelCVComparison( ...
+    PredictorMode="DominantAIxOD", NumRepeats=100, NumFolds=5, ...
+    NumInnerFolds=5, RandomSeed=1, ...
+    OutputFolder="C:\EM\CurrentSpread\02_gaussian\InteractiveGaussianMetaPopulation\MT\2D\DominantAIxOD_GaussianVsStimOnly_CV_Outer100_SourceStimBothEyes");
+```
+
+`OuterRepeatMetrics.csv` records the held-out MSE and R2 for each complete
+outer repeat, including each cue. `OuterRepeatRobustness.csv` reports the
+fraction of repeats and folds improved and the spread of the error difference.
+`OuterSigmaRobustness.csv` records the distribution of selected sigmas across
+outer fits. `OuterCVRobustness.png` visualizes these results. Percentiles across
+random splits describe split sensitivity; they are not population confidence
+intervals, and the fraction of improved repeats is not a p-value. The corrected
+paired significance test remains separate. Seed 1 preserves the first five
+outer repeats from the initial five-repeat run exactly.
+
+`SaveGaussianDominantAIxODAreaR2Scatters` places the MT 2D and FST 3D
+repeat-wise R2 comparisons in one two-panel figure with fixed colors: orange
+for MT and purple for FST. It uses no performance color gradient and requires
+the corrected source-both-eye cohort. Its default output folder is
+`C:\EM\CurrentSpread\02_gaussian\InteractiveGaussianMetaPopulation\DominantAIxOD_MT2D_FST3D_SourceStimBothEyes`.
+
+For the matched **correlation-OD** comparison of both channel predictors in MT
+2D and FST 3D, run:
+
+```matlab
+addpath('02_gaussian/interactive_population/channel_prediction');
+result = RunGaussianCorrelationODPredictorComparison;
+```
+
+This runs 100 repeats of five-fold outer CV with five-fold inner CV for both
+Combined AI and dominant-eye AI times absolute correlation OD. Here OD is
+`atanh(r(Combined,MonoL)) - atanh(r(Combined,MonoR))`; the raw absolute Fisher-z
+difference is used, without clipping or the viewer's opacity transformation.
+Its sign assigns each channel's dominant eye and the stimulation site's
+behavioral Dom/NonDom labels. Both predictors must share neurons, contributing
+channels, observations, sigma grid, and inner/outer folds. The cohorts remain
+63 MT 2D and 30 FST 3D neurons for the current input.
+
+The output includes a four-panel original-versus-Gaussian nested-CV R2 figure
+(columns MT/FST, rows Combined AI/dominant AI x |OD|), signed-rank split
+robustness statistics, corrected CV improvement p-values, and a separate
+direct neural-predictor scatter. Colors remain orange for MT and purple for
+FST. Results default to
+`C:\EM\CurrentSpread\02_gaussian\InteractiveGaussianMetaPopulation\CorrelationOD\BothPredictors_MT2D_FST3D_SourceStimBothEyes`.
+`OutputFolder` overrides that root; Max-OD and older results are preserved.
+
+`RunGaussianCorrelationODBetaComparison` plots ordinary fitted coefficients
+versus sigma for both predictors, with MT/FST rows and four cue columns.
+Solid lines indicate Combined AI; dashed lines indicate dominant AI x |OD|.
+Separate figures show slope beta1, intercept beta0, scale-adjusted slope
+`beta1 * SD(pooled predictor)`, and predicted DeltaBias. The DeltaBias figure
+shows individual neuron curves and their median; an across-neuron mean would
+be flat because of the fitted intercept. These are full-sample ordinary fits,
+not averages of outer-CV coefficients or held-out predictions. Outputs and
+underlying predictions default to the comparison folder's `BetaVsSigma`
+subfolder; `OutputFolder` and `SigmaValues` are optional overrides.
+
+```matlab
+betaComparison = RunGaussianCorrelationODBetaComparison;
+```
+
+`RunGaussianChannelCVComparison` separately compares the previous cue-AI+AI:OD model with the
+Combined-AI model using matched sessions, channels, observations, and sigma
+grids. Both models use the same five session folds repeated five times and
+select sigma by equal-cue CV MSE. It also performs nested CV: each outer fold
+selects sigma by five-fold inner CV using only its training sessions, then
+fits cue-specific beta on those training sessions and predicts the outer
+test sessions. This evaluates both beta fitting and sigma selection.
+
+The primary comparison is the old-minus-new equal-cue outer-fold MSE, using
+the Nadeau-Bengio corrected paired t-test to account approximately for
+overlapping training sets. Positive differences favor Combined AI. The
+output includes a one-sided improvement p-value, two-sided p-value, and 95%
+confidence interval; the four secondary cue-wise improvement p-values use
+Holm adjustment. Individual repeats/folds are not treated as independent
+observations in the standard-error calculation. All comparisons, outer
+predictions, inner/outer fold assignments, and selected sigmas are saved in
+`<Area>\<UnitType>\ChannelFirstCombinedAI_CVComparison`. Defaults are MT 2D,
+five outer repeats, five outer folds, five inner folds, and seed 1.
+
+```matlab
+addpath('02_gaussian/interactive_population/channel_prediction');
+analysis = RunGaussianChannelCVComparison;
+```
+
+The variance correction follows the [documented corrected repeated-CV
+comparison](https://scikit-learn.org/stable/auto_examples/model_selection/plot_grid_search_stats.html).
+Older one-method launchers are retained under
+`interactive_population/legacy_launchers` only for compatibility.
 
 Generated artifacts default to area-specific folders outside the repository:
 `C:\EM\CurrentSpread\02_gaussian\InteractiveGaussianMetaPopulation\MT` and
 `...\FST`. `BuildInteractiveGaussianMetaPopulationSuite(Area="FST")` builds
-the FST cache plus all three objectives for both meta-2D and meta-3D sessions.
+the FST cache, the channel-first prediction objective, and all three legacy
+meta objectives for both 2D and 3D selections.
 
-The CV method maximizes the unweighted sum of four cue-specific repeated
+The legacy meta CV method maximizes the unweighted sum of four cue-specific repeated
 five-fold cross-validated R-squared values. The ordinary method maximizes the
 corresponding four full-sample R-squared values. Both use
 `DeltaBias ~ AI + AI:OD` without an OD main effect. The distance method
@@ -454,7 +647,10 @@ minimizes the unweighted sum of cue-wise mean squared perpendicular distances
 to the displayed OD-weighted Type II lines.
 
 Slider movement reads only cached results and does not recalculate tuning or
-fits.
+fits. The population viewer also provides live controls for dot size, marker
+edge transparency, marker edge width, and colored versus grayscale dot-face fill.
+These are display-only settings and persist when area, population class, or
+optimization method is changed within the app.
 
 `PlotOriginalVsOptimizedAIOD.m` reproduces the population-analysis perspective
 scatter convention for Jim MT 2D sessions: dominant and non-dominant eyes are

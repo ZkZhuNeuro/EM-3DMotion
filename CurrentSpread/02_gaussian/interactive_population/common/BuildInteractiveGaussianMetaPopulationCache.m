@@ -10,13 +10,14 @@ function cache = BuildInteractiveGaussianMetaPopulationCache(options)
 % OD can be defined either by the left/right maximum-response difference or
 % by the difference between the two eye-to-Combined correlations.
 %
-% Population selection and plotting match the current pipeline:
+% Legacy meta-population selection and plotting match the current pipeline:
 %   * the requested MT/FST area and monkey selection;
 %   * stored monocular p_AI(2) and p_AI(3) < 0.05;
 %   * optional adjacent-channel continuity exclusions;
 %   * AI from the z-scored Gaussian meta tuning;
 %   * signed OD and 2D/3D class from the matching raw Gaussian meta tuning;
 %   * dominant/non-dominant cue ordering reassigned separately at each sigma;
+%   * sigma 0.01 anchored to the fixed-StimElec population inputs;
 %   * OD-weighted population lines constrained through the origin.
 %
 % The default output is area-specific under:
@@ -27,7 +28,7 @@ function cache = BuildInteractiveGaussianMetaPopulationCache(options)
 
 arguments
     options.StateFile (1, 1) string = ...
-        "C:\EM\PopulationAnalysis\unit_table_gof.mat"
+        "C:\EM\BehaviorFitting\unit_table_gof.mat"
     options.OutputFolder (1, 1) string = ""
     options.CacheFileName (1, 1) string = ...
         "GaussianMetaPopulationSigmaCache.mat"
@@ -51,6 +52,9 @@ arguments
     options.ValidateAgainstBuilder (1, 1) logical = false
     options.ValidationSigma (1, 1) double ...
         {mustBePositive} = 5.01187233627272
+    options.StimChannelReferenceSigma (1, 1) double ...
+        {mustBePositive} = 0.01
+    options.RefreshFromWorkbooks (1, 1) logical = false
 end
 
 sigmaValues = sort(unique(double(options.SigmaValues(:)')));
@@ -91,16 +95,32 @@ end
 assertOutputOutsideRepository(options.OutputFolder, currentSpreadRoot);
 ensureFolder(options.OutputFolder);
 
-[unitTable, resolvedStateFile, workbookAudit] = ...
-    LoadLatestUnitTableGof(options.StateFile); %#ok<ASGLU>
+if options.RefreshFromWorkbooks
+    [unitTable, resolvedStateFile, workbookAudit] = ...
+        LoadLatestUnitTableGof(options.StateFile);
+else
+    loadedState = load(options.StateFile, 'unit_table_gof');
+    if ~isfield(loadedState, 'unit_table_gof') || ...
+            ~istable(loadedState.unit_table_gof)
+        error('GaussianMetaInteractive:InvalidStateFile', ...
+            '%s does not contain table unit_table_gof.', options.StateFile);
+    end
+    unitTable = loadedState.unit_table_gof;
+    resolvedStateFile = char(options.StateFile);
+    workbookAudit = struct('Applied', false, ...
+        'Reason', "Exact supplied MAT artifact used without workbook refresh");
+end
 requireVariables(unitTable, ["Date", "Monkey", "ROI", "StimElec", ...
-    "NChannels", "AI", "p_AI"]);
+    "NChannels", "AI", "p_AI", "tuning_mean", "Z3D_v_Z2D"]);
 
 excludedRows = loadExcludedRows(options.ExcludedRowsFile, height(unitTable));
-candidateMask = populationCandidateMask( ...
+channelCandidateMask = areaMonkeyCandidateMask( ...
+    unitTable, options.Area, options.Monkey);
+metaCandidateMask = populationCandidateMask( ...
     unitTable, options.Area, options.Monkey, options.TuningAlpha);
-candidateMask(excludedRows) = false;
-sourceRows = find(candidateMask);
+channelCandidateMask(excludedRows) = false;
+metaCandidateMask(excludedRows) = false;
+sourceRows = find(channelCandidateMask);
 if isempty(sourceRows)
     error('GaussianMetaInteractive:NoCandidates', ...
         'No %s population candidates remained after selection.', options.Area);
@@ -112,10 +132,18 @@ recordingDates = normalizeDateColumn(unitTable.Date);
 
 numSessions = numel(sourceRows);
 numSigmas = numel(sigmaValues);
+numProbePositions = numel(options.ChannelMap);
 metaAI = nan(numSessions, 4, numSigmas, 'single');
 metaOD = nan(numSessions, numSigmas, 'single');
 metaZDifference = nan(numSessions, numSigmas, 'single');
 effectiveChannels = nan(numSessions, numSigmas, 'single');
+channelAI = nan(numSessions, 4, numProbePositions, 'single');
+channelSignedOD = nan(numSessions, numProbePositions, 'single');
+channelTuningP = nan(numSessions, 4, numProbePositions, 'single');
+channelAvailable = false(numSessions, numProbePositions);
+channelPassesTuningGate = false(numSessions, numProbePositions);
+channelEligibleForPrediction = false(numSessions, numProbePositions);
+channelRelativePositions = nan(numSessions, numProbePositions, 'single');
 sessionStatus = repmat("Pending", numSessions, 1);
 sessionMessage = strings(numSessions, 1);
 sessionCacheFile = strings(numSessions, 1);
@@ -124,6 +152,13 @@ sessionRelativePositions = repmat({zeros(1, 0)}, numSessions, 1);
 sessionMonkey = strings(numSessions, 1);
 sessionDate = NaT(numSessions, 1);
 sessionStimChannel = nan(numSessions, 1);
+stimReferenceAI = nan(numSessions, 4);
+stimReferenceOD = nan(numSessions, 1);
+stimReferenceZDifference = nan(numSessions, 1);
+stimReferenceAvailable = false(numSessions, 1);
+stimReferenceMessage = strings(numSessions, 1);
+stimZDifference = nan(numSessions, 1);
+stimChannelSourceP = nan(numSessions, 4);
 
 fprintf(['Building Gaussian-meta %s population cache: %d sessions x ' ...
     '%d sigma values.\n'], options.Area, numSessions, numSigmas);
@@ -132,6 +167,29 @@ for sessionIndex = 1:numSessions
     sourceRow = sourceRows(sessionIndex);
     sessionMonkey(sessionIndex) = getRowText(unitTable.Monkey, sourceRow);
     sessionDate(sessionIndex) = recordingDates(sourceRow);
+    stimZDifference(sessionIndex) = ...
+        numericScalar(unitTable.Z3D_v_Z2D, sourceRow);
+    sourceP = numericArray(unitTable.p_AI, sourceRow);
+    sourcePCount = min(4, numel(sourceP));
+    stimChannelSourceP(sessionIndex, 1:sourcePCount) = ...
+        reshape(sourceP(1:sourcePCount), 1, []);
+    try
+        reference = calculateStimChannelPopulationReference( ...
+            unitTable, sourceRow, options.ODDefinition);
+        stimReferenceAI(sessionIndex, :) = reference.AI;
+        stimReferenceOD(sessionIndex) = reference.OD;
+        stimReferenceZDifference(sessionIndex) = ...
+            reference.Z3DMinusZ2D;
+        stimReferenceAvailable(sessionIndex) = reference.Valid;
+        sessionStimChannel(sessionIndex) = reference.StimChannel;
+        if ~reference.Valid
+            stimReferenceMessage(sessionIndex) = ...
+                "Nonfinite or zero stimulation-channel reference";
+        end
+    catch ME
+        stimReferenceMessage(sessionIndex) = ...
+            string(ME.identifier) + ": " + string(ME.message);
+    end
     try
         summary = preprocessQuickSession(unitTable, sourceRow, ...
             recordingDates(sourceRow), options);
@@ -150,6 +208,30 @@ for sessionIndex = 1:numSessions
         sessionRelativePositions{sessionIndex} = ...
             summary.RelativePositions;
         sessionStimChannel(sessionIndex) = summary.StimChannel;
+        probePositions = zeros(1, numel(summary.Channels));
+        for channelIndex = 1:numel(summary.Channels)
+            probePositions(channelIndex) = find( ...
+                options.ChannelMap == summary.Channels(channelIndex), 1);
+        end
+        channelAI(sessionIndex, :, probePositions) = reshape( ...
+            single(summary.ChannelAI), [1, 4, numel(probePositions)]);
+        channelSignedOD(sessionIndex, probePositions) = ...
+            single(summary.ChannelSignedOD);
+        channelTuningP(sessionIndex, :, probePositions) = reshape( ...
+            single(summary.ChannelTuningP), ...
+            [1, 4, numel(probePositions)]);
+        channelAvailable(sessionIndex, probePositions) = true;
+        channelRelativePositions(sessionIndex, probePositions) = ...
+            single(summary.RelativePositions);
+        passesTuning = summary.ChannelTuningP(2, :) < ...
+            options.TuningAlpha & summary.ChannelTuningP(3, :) < ...
+            options.TuningAlpha;
+        usable = passesTuning & isfinite(summary.ChannelSignedOD) & ...
+            summary.ChannelSignedOD ~= 0 & ...
+            all(isfinite(summary.ChannelAI), 1);
+        channelPassesTuningGate(sessionIndex, probePositions) = ...
+            passesTuning;
+        channelEligibleForPrediction(sessionIndex, probePositions) = usable;
     catch ME
         sessionStatus(sessionIndex) = "Error";
         sessionMessage(sessionIndex) = ...
@@ -163,7 +245,29 @@ for sessionIndex = 1:numSessions
 end
 
 successfulSession = sessionStatus == "Success";
-eligible = successfulSession & isfinite(metaOD) & metaOD ~= 0 & ...
+eligibleChannelCount = sum(channelEligibleForPrediction, 2);
+stimReferenceTolerance = max(1e-12, ...
+    32 .* eps(max(1, options.StimChannelReferenceSigma)));
+stimReferenceIndices = find(abs( ...
+    sigmaValues - options.StimChannelReferenceSigma) <= ...
+    stimReferenceTolerance);
+for referenceIndex = stimReferenceIndices
+    metaAI(:, :, referenceIndex) = single(stimReferenceAI);
+    metaOD(:, referenceIndex) = single(stimReferenceOD);
+    metaZDifference(:, referenceIndex) = ...
+        single(stimReferenceZDifference);
+    effectiveChannels(:, referenceIndex) = 1;
+end
+
+processingAvailable = repmat(successfulSession, 1, numSigmas);
+if ~isempty(stimReferenceIndices)
+    processingAvailable(:, stimReferenceIndices) = ...
+        repmat(stimReferenceAvailable, 1, numel(stimReferenceIndices));
+end
+behaviorEligible = any(validBiasFit(sourceRows, :), 2);
+stimTuningEligible = metaCandidateMask(sourceRows);
+eligible = processingAvailable & behaviorEligible & stimTuningEligible & ...
+    isfinite(metaOD) & metaOD ~= 0 & ...
     isfinite(metaZDifference) & metaZDifference ~= 0 & ...
     squeeze(all(isfinite(metaAI), 2));
 is2D = eligible & metaZDifference < 0;
@@ -179,10 +283,16 @@ statistics3D = calculatePopulationStatistics( ...
 
 sessionAudit = table(sourceRows, sessionMonkey, sessionDate, ...
     sessionStimChannel, sessionChannelCount, sessionRelativePositions, ...
-    sessionCacheFile, successfulSession, sessionStatus, sessionMessage, ...
+    sessionCacheFile, successfulSession, stimTuningEligible, ...
+    behaviorEligible, eligibleChannelCount, ...
+    stimReferenceAvailable, stimReferenceMessage, ...
+    sessionStatus, sessionMessage, ...
     'VariableNames', {'SourceTableRow', 'Monkey', 'Date', 'StimChannel', ...
     'LiveGaussianChannelCount', 'RelativeChannelPositions', 'CacheFile', ...
-    'SuccessfullyPreprocessed', 'Status', 'Message'});
+    'SuccessfullyPreprocessed', 'StimChannelTuningGate', ...
+    'AnyBehaviorFitValid', 'EligiblePredictionChannelCount', ...
+    'StimReferenceAvailable', 'StimReferenceMessage', ...
+    'Status', 'Message'});
 writetable(sessionAudit, fullfile(options.OutputFolder, ...
     'GaussianMetaPopulationSessionAudit.csv'));
 
@@ -198,18 +308,30 @@ writetable(summaryTable3D, fullfile(options.OutputFolder, ...
     'GaussianMetaPopulationSigmaSummary_3D.csv'));
 
 validation = struct();
+validation.StimChannelReference = validateStimChannelReference( ...
+    sigmaValues, stimReferenceIndices, metaAI, metaOD, ...
+    metaZDifference, stimReferenceAI, stimReferenceOD, ...
+    stimReferenceZDifference, stimReferenceAvailable, ...
+    behaviorEligible & stimTuningEligible, is2D, is3D, ...
+    pointValid2D, pointValid3D, ...
+    validBiasFit(sourceRows, :));
+validation.ChannelFirstStimReference = validateChannelFirstStimReference( ...
+    channelAI, channelSignedOD, sessionStimChannel, options.ChannelMap, ...
+    stimReferenceAI, stimReferenceOD, successfulSession & ...
+    stimReferenceAvailable);
 if options.ValidateAgainstBuilder && options.ODDefinition == "Max"
-    validation = validateAgainstExistingBuilder(unitTable, candidateMask, ...
+    validation.MetaBuilder = validateAgainstExistingBuilder( ...
+        unitTable, metaCandidateMask, ...
         sourceRows, sigmaValues, metaAI, metaOD, metaZDifference, options);
 elseif options.ValidateAgainstBuilder
-    validation.Skipped = true;
-    validation.Reason = ...
+    validation.MetaBuilder.Skipped = true;
+    validation.MetaBuilder.Reason = ...
         "The established meta builder exposes maximum-response OD only; " + ...
         "correlation OD is verified independently by unit tests.";
 end
 
 cache = struct();
-cache.SchemaVersion = 3;
+cache.SchemaVersion = 6;
 cache.Created = datetime('now', 'TimeZone', 'local');
 odDescription = odDefinitionDescription(options.ODDefinition);
 cache.Description = [ ...
@@ -217,17 +339,30 @@ cache.Description = [ ...
     "AI from channel-standardized Gaussian meta tuning"; ...
     "OD from matching raw-FR Gaussian meta tuning: " + odDescription; ...
     "Z3D-Z2D class from matching raw-FR Gaussian meta tuning"; ...
+    "Sigma " + options.StimChannelReferenceSigma + ...
+        " uses exact fixed-StimElec AI, OD, and Z3D-Z2D inputs"; ...
     "Dominant-eye cue ordering recomputed independently at every sigma"; ...
-    "Population lines are OD-weighted least-squares slopes through zero"];
+    "Population lines are OD-weighted least-squares slopes through zero"; ...
+    "Channel-first inputs retain local OD and require MonoL/MonoR p_AI below alpha"];
 cache.StateFile = string(resolvedStateFile);
+cache.RefreshFromWorkbooks = options.RefreshFromWorkbooks;
+cache.WorkbookAudit = workbookAudit;
 cache.OutputFolder = options.OutputFolder;
 cache.MonkeySelection = options.Monkey;
 cache.Area = options.Area;
 cache.ODDefinition = options.ODDefinition;
 cache.ODFormula = odDefinitionFormula(options.ODDefinition);
 cache.TuningAlpha = options.TuningAlpha;
+cache.StimChannelReferenceSigma = options.StimChannelReferenceSigma;
+cache.StimChannelReferenceIndices = stimReferenceIndices;
+cache.StimReferenceAI = stimReferenceAI;
+cache.StimReferenceOD = stimReferenceOD;
+cache.StimReferenceZ3DMinusZ2D = stimReferenceZDifference;
+cache.StimReferenceAvailable = stimReferenceAvailable;
 cache.ExcludedRowsFile = options.ExcludedRowsFile;
 cache.ExcludedSourceRows = excludedRows;
+cache.ChannelCandidateMask = channelCandidateMask;
+cache.MetaCandidateMask = metaCandidateMask;
 cache.ChannelMap = options.ChannelMap;
 cache.JimCacheFolder = options.JimCacheFolder;
 cache.ClayCacheFolder = options.ClayCacheFolder;
@@ -237,6 +372,20 @@ cache.Monkey = sessionMonkey;
 cache.Date = sessionDate;
 cache.StimChannel = sessionStimChannel;
 cache.SessionStatus = sessionStatus;
+cache.StimChannelTuningGate = stimTuningEligible;
+cache.StimChannelSourceP = stimChannelSourceP;
+cache.StimZ3DMinusZ2D = stimZDifference;
+cache.BehaviorByPhysicalCue = deltaBias(sourceRows, 1:4);
+cache.BehaviorValidByPhysicalCue = validBiasFit(sourceRows, 1:4);
+cache.ChannelNumbers = repmat(options.ChannelMap, numSessions, 1);
+cache.ChannelRelativePositions = channelRelativePositions;
+cache.ChannelAvailable = channelAvailable;
+cache.ChannelAI = channelAI;
+cache.ChannelSignedOD = channelSignedOD;
+cache.ChannelTuningP = channelTuningP;
+cache.ChannelPassesTuningGate = channelPassesTuningGate;
+cache.ChannelEligibleForPrediction = channelEligibleForPrediction;
+cache.EligiblePredictionChannelCount = eligibleChannelCount;
 cache.MetaAI = metaAI;
 cache.MetaOD = metaOD;
 cache.MetaZ3DMinusZ2D = metaZDifference;
@@ -269,13 +418,24 @@ manifest = [ ...
     "Gaussian-meta interactive population cache"; ...
     "Created: " + string(cache.Created); ...
     "State file: " + string(resolvedStateFile); ...
+    "Workbook refresh: " + string(options.RefreshFromWorkbooks); ...
     "Area: " + options.Area; ...
     "OD definition: " + options.ODDefinition; ...
     "OD formula: " + cache.ODFormula; ...
     "Monkey selection: " + options.Monkey; ...
     "Sigma count: " + numSigmas; ...
     "Sigma range: " + sigmaValues(1) + " to " + sigmaValues(end); ...
-    "Candidate sessions: " + numSessions; ...
+    "Stim-channel reference sigma: " + ...
+        options.StimChannelReferenceSigma; ...
+    "Stim-channel reference grid index: " + ...
+        join(string(stimReferenceIndices), ","); ...
+    "Stim-channel reference invariant passed: " + ...
+        string(validation.StimChannelReference.Passed); ...
+    "Area/monkey channel-prediction candidates: " + numSessions; ...
+    "Stimulation-channel meta-tuning gate passes: " + ...
+        nnz(stimTuningEligible); ...
+    "Sessions with at least one eligible prediction channel: " + ...
+        nnz(eligibleChannelCount > 0); ...
     "Successfully preprocessed: " + nnz(successfulSession); ...
     "Continuity exclusions: " + numel(excludedRows); ...
     "Excluded rows file: " + options.ExcludedRowsFile; ...
@@ -295,6 +455,7 @@ function summary = preprocessQuickSession( ...
 stimChannel = numericScalar(unitTable.StimElec, row);
 declaredChannelCount = numericScalar(unitTable.NChannels, row);
 aiValues = numericArray(unitTable.AI, row);
+tuningMean = numericArray(unitTable.tuning_mean, row);
 if ~isscalar(stimChannel) || ~isfinite(stimChannel) || ...
         stimChannel < 1 || stimChannel ~= fix(stimChannel)
     error('GaussianMetaInteractive:InvalidStimChannel', ...
@@ -324,7 +485,7 @@ Neuro = loaded.Neuro;
 validateNeuro(Neuro);
 
 availableChannelCount = min([declaredChannelCount, ...
-    size(aiValues, 2), size(Neuro.All, 4)]);
+    size(aiValues, 2), size(tuningMean, 3), size(Neuro.All, 4)]);
 probePositions = 1:numel(options.ChannelMap);
 channels = options.ChannelMap;
 deadChannels = getDeadChannels(unitTable, row);
@@ -338,6 +499,11 @@ if isempty(channels) || ~ismember(stimChannel, channels)
         stimChannel);
 end
 relativePositions = probePositions - stimPosition;
+
+if size(aiValues, 1) < 4 || size(tuningMean, 1) < 4
+    error('GaussianMetaInteractive:ChannelInputSize', ...
+        'AI and tuning_mean must contain all four Quick cue rows.');
+end
 
 cueCount = min(4, size(Neuro.All, 1));
 coherenceCount = size(Neuro.All, 2);
@@ -402,6 +568,66 @@ summary.RawChannelMean = rawChannelMean;
 summary.StandardizedMean = standardizedMean;
 summary.StandardizedCovariance = standardizedCovariance;
 summary.ObservationCount = observationCount;
+summary.ChannelAI = double(aiValues(1:4, channels));
+summary.ChannelSignedOD = calculateGaussianMetaOD( ...
+    double(tuningMean(1:4, :, channels)), ...
+    ones(4, size(tuningMean, 2)), ...
+    options.ODDefinition);
+summary.ChannelTuningP = calculateChannelTuningPValues( ...
+    Neuro, channels, summary.Coherence);
+end
+
+
+function pValues = calculateChannelTuningPValues(Neuro, channels, coherence)
+pValues = nan(4, numel(channels));
+for channelIndex = 1:numel(channels)
+    for cue = 1:4
+        pValues(cue, channelIndex) = directionTuningPValue( ...
+            Neuro, channels(channelIndex), cue, coherence);
+    end
+end
+end
+
+
+function pValue = directionTuningPValue(Neuro, channel, cue, coherence)
+pValue = NaN;
+firingRate = zeros(0, 1);
+signedCoherence = zeros(0, 1);
+trialCapacity = size(Neuro.All, 3);
+maximumIndex = min([numel(coherence), size(Neuro.All, 2), ...
+    size(Neuro.Trials.NumTrials, 2)]);
+for coherenceIndex = 1:maximumIndex
+    % Match the established Quick p_AI calculation: only coherence bins
+    % present in the Combined cue define the common task support.
+    if boundedTrialCount(Neuro.Trials.NumTrials, 1, ...
+            coherenceIndex, trialCapacity) == 0
+        continue
+    end
+    trialCount = boundedTrialCount(Neuro.Trials.NumTrials, cue, ...
+        coherenceIndex, trialCapacity);
+    if trialCount == 0
+        continue
+    end
+    values = reshape(double(Neuro.All(cue, coherenceIndex, ...
+        1:trialCount, channel)), [], 1);
+    values = values(isfinite(values));
+    firingRate = [firingRate; values]; %#ok<AGROW>
+    signedCoherence = [signedCoherence; repmat( ...
+        coherence(coherenceIndex), numel(values), 1)]; %#ok<AGROW>
+end
+if numel(firingRate) < 4 || std(firingRate) <= eps
+    return
+end
+try
+    tuningTable = table(firingRate, abs(signedCoherence), ...
+        sign(signedCoherence), 'VariableNames', ...
+        {'FR', 'Abs_Coherence', 'Direction'});
+    linearModel = fitlm(tuningTable, 'FR ~ Abs_Coherence + Direction');
+    anovaResults = anova(linearModel);
+    pValue = anovaResults.pValue(2);
+catch
+    pValue = NaN;
+end
 end
 
 
@@ -480,7 +706,7 @@ switch definition
     case "RMSE"
         description = "normalized Combined-to-MonoL/MonoR RMSE difference";
     case "Correlation"
-        description = "Combined-to-MonoL r minus Combined-to-MonoR r";
+        description = "Fisher-z Combined-to-MonoL minus Combined-to-MonoR correlation";
     case "PartialCorrelation"
         description = "Fisher-z partial-correlation left-minus-right difference";
 end
@@ -494,7 +720,7 @@ switch definition
     case "RMSE"
         formula = "(RMSE(Combined,MonoR)-RMSE(Combined,MonoL))/(RMSE(Combined,MonoR)+RMSE(Combined,MonoL))";
     case "Correlation"
-        formula = "PearsonR(Combined,MonoL)-PearsonR(Combined,MonoR)";
+        formula = "atanh(PearsonR(Combined,MonoL))-atanh(PearsonR(Combined,MonoR))";
     case "PartialCorrelation"
         formula = "FisherZ(partialR(Combined,MonoL|MonoR))-FisherZ(partialR(Combined,MonoR|MonoL))";
 end
@@ -642,6 +868,158 @@ end
 end
 
 
+function validation = validateChannelFirstStimReference( ...
+    channelAI, channelSignedOD, stimChannel, channelMap, ...
+    referenceAI, referenceOD, validSession)
+validation = struct('Passed', false, 'SessionCount', nnz(validSession), ...
+    'MaxAbsAIDifference', NaN, 'MaxAbsODDifference', NaN);
+aiDifference = nan(size(channelAI, 1), 4);
+odDifference = nan(size(channelAI, 1), 1);
+for sessionIndex = find(validSession(:))'
+    position = find(channelMap == stimChannel(sessionIndex), 1);
+    if isempty(position)
+        continue
+    end
+    actualAI = reshape(double(channelAI(sessionIndex, :, position)), 1, 4);
+    actualOD = double(channelSignedOD(sessionIndex, position));
+    aiDifference(sessionIndex, :) = ...
+        abs(actualAI - referenceAI(sessionIndex, :));
+    odDifference(sessionIndex) = ...
+        abs(actualOD - referenceOD(sessionIndex));
+end
+if ~any(isfinite(aiDifference), 'all') || ~any(isfinite(odDifference))
+    validation.Reason = "No valid stimulation-channel comparison.";
+    return
+end
+validation.MaxAbsAIDifference = max(aiDifference, [], 'all', 'omitnan');
+validation.MaxAbsODDifference = max(odDifference, [], 'omitnan');
+tolerance = 5e-6;
+validation.Passed = validation.MaxAbsAIDifference <= tolerance && ...
+    validation.MaxAbsODDifference <= tolerance;
+assert(validation.Passed, ...
+    'GaussianMetaInteractive:ChannelStimReferenceMismatch', ...
+    ['Channel-first stimulation-contact inputs differ from the fixed ' ...
+    'population reference (AI %.3g, OD %.3g).'], ...
+    validation.MaxAbsAIDifference, validation.MaxAbsODDifference);
+validation.Reason = ...
+    "Channel-first stimulation-contact AI and OD match the fixed reference.";
+end
+
+
+function validation = validateStimChannelReference( ...
+    sigmaValues, referenceIndices, metaAI, metaOD, metaZDifference, ...
+    referenceAI, referenceOD, referenceZDifference, referenceAvailable, ...
+    behaviorEligible, is2D, is3D, pointValid2D, pointValid3D, ...
+    validBiasFit)
+validation = struct();
+validation.Passed = false;
+validation.Skipped = isempty(referenceIndices);
+validation.Indices = referenceIndices;
+validation.Sigma = sigmaValues(referenceIndices);
+validation.MaxAbsAIDifference = NaN;
+validation.MaxAbsODDifference = NaN;
+validation.MaxAbsZDifference = NaN;
+validation.Expected2DSessions = NaN;
+validation.Actual2DSessions = NaN;
+validation.Expected3DSessions = NaN;
+validation.Actual3DSessions = NaN;
+validation.Expected2DPointCounts = nan(1, 4);
+validation.Actual2DPointCounts = nan(1, 4);
+validation.Expected3DPointCounts = nan(1, 4);
+validation.Actual3DPointCounts = nan(1, 4);
+if isempty(referenceIndices)
+    validation.Reason = ...
+        "StimChannelReferenceSigma is absent from the sigma grid.";
+    return
+end
+
+expectedEligible = referenceAvailable & behaviorEligible;
+expected2D = expectedEligible & referenceZDifference < 0;
+expected3D = expectedEligible & referenceZDifference > 0;
+expectedPoint2D = false(numel(referenceOD), 4);
+expectedPoint3D = false(numel(referenceOD), 4);
+for sessionIndex = 1:numel(referenceOD)
+    if referenceOD(sessionIndex) > 0
+        cueOrder = [2 1 4 3];
+    elseif referenceOD(sessionIndex) < 0
+        cueOrder = [3 1 4 2];
+    else
+        continue
+    end
+    for condition = 1:4
+        cue = cueOrder(condition);
+        expectedPoint2D(sessionIndex, condition) = ...
+            expected2D(sessionIndex) && validBiasFit(sessionIndex, cue);
+        expectedPoint3D(sessionIndex, condition) = ...
+            expected3D(sessionIndex) && validBiasFit(sessionIndex, cue);
+    end
+end
+
+tolerance = 5e-6;
+for referenceIndex = referenceIndices
+    aiDifference = maxAbsDifference( ...
+        double(metaAI(:, :, referenceIndex)), referenceAI);
+    odDifference = maxAbsDifference( ...
+        double(metaOD(:, referenceIndex)), referenceOD);
+    zDifference = maxAbsDifference( ...
+        double(metaZDifference(:, referenceIndex)), referenceZDifference);
+    actual2D = is2D(:, referenceIndex);
+    actual3D = is3D(:, referenceIndex);
+    actualPoint2D = pointValid2D(:, :, referenceIndex);
+    actualPoint3D = pointValid3D(:, :, referenceIndex);
+
+    assert(aiDifference <= tolerance && odDifference <= tolerance && ...
+        zDifference <= tolerance, ...
+        'GaussianMetaInteractive:StimReferenceValueMismatch', ...
+        ['Sigma %.12g does not reproduce the fixed-StimElec values: ' ...
+        'AI %.3g, OD %.3g, Z %.3g.'], ...
+        sigmaValues(referenceIndex), aiDifference, odDifference, zDifference);
+    assert(isequal(actual2D, expected2D) && ...
+        isequal(actual3D, expected3D), ...
+        'GaussianMetaInteractive:StimReferenceCohortMismatch', ...
+        'Sigma %.12g does not reproduce the fixed-StimElec cohort.', ...
+        sigmaValues(referenceIndex));
+    assert(isequal(actualPoint2D, expectedPoint2D) && ...
+        isequal(actualPoint3D, expectedPoint3D), ...
+        'GaussianMetaInteractive:StimReferencePointMismatch', ...
+        'Sigma %.12g does not reproduce fixed-StimElec cue inclusion.', ...
+        sigmaValues(referenceIndex));
+
+    validation.MaxAbsAIDifference = aiDifference;
+    validation.MaxAbsODDifference = odDifference;
+    validation.MaxAbsZDifference = zDifference;
+    validation.Expected2DSessions = nnz(expected2D);
+    validation.Actual2DSessions = nnz(actual2D);
+    validation.Expected3DSessions = nnz(expected3D);
+    validation.Actual3DSessions = nnz(actual3D);
+    validation.Expected2DPointCounts = sum(expectedPoint2D, 1);
+    validation.Actual2DPointCounts = sum(actualPoint2D, 1);
+    validation.Expected3DPointCounts = sum(expectedPoint3D, 1);
+    validation.Actual3DPointCounts = sum(actualPoint3D, 1);
+end
+validation.Passed = true;
+validation.Reason = "Exact stimulation-channel endpoint invariant passed.";
+end
+
+
+function value = maxAbsDifference(first, second)
+first = double(first);
+second = double(second);
+if ~isequal(size(first), size(second)) || ...
+        any(isfinite(first(:)) ~= isfinite(second(:)))
+    value = Inf;
+    return
+end
+difference = abs(first - second);
+difference = difference(isfinite(difference));
+if isempty(difference)
+    value = 0;
+else
+    value = max(difference);
+end
+end
+
+
 function validation = validateAgainstExistingBuilder( ...
     unitTable, candidateMask, sourceRows, sigmaValues, metaAI, metaOD, ...
     metaZDifference, options)
@@ -669,7 +1047,8 @@ batchZ = double(metaZDifference(:, sigmaIndex));
 validation = struct();
 validation.Sigma = sigma;
 validation.EligibleAgreement = isequal( ...
-    eligibleMask(sourceRows), all(isfinite(batchAI), 2) & ...
+    eligibleMask(sourceRows), candidateMask(sourceRows) & ...
+    all(isfinite(batchAI), 2) & ...
     isfinite(batchOD) & batchOD ~= 0 & isfinite(batchZ) & batchZ ~= 0);
 validation.MaxAbsAIDifference = max(abs(builderAI - batchAI), [], ...
     'all', 'omitnan');
@@ -897,18 +1276,27 @@ end
 
 function mask = populationCandidateMask(unitTable, area, monkey, alpha)
 rowCount = height(unitTable);
+mask = areaMonkeyCandidateMask(unitTable, area, monkey);
+for row = 1:rowCount
+    if ~mask(row)
+        continue
+    end
+    pValues = numericArray(unitTable.p_AI, row);
+    mask(row) = numel(pValues) >= 3 && isfinite(pValues(2)) && ...
+        isfinite(pValues(3)) && pValues(2) < alpha && pValues(3) < alpha;
+end
+end
+
+
+function mask = areaMonkeyCandidateMask(unitTable, area, monkey)
+rowCount = height(unitTable);
 mask = false(rowCount, 1);
 for row = 1:rowCount
     if ~strcmpi(getRowText(unitTable.ROI, row), area)
         continue
     end
     monkeyName = getRowText(unitTable.Monkey, row);
-    if monkey ~= "Both" && ~strcmpi(monkeyName, monkey)
-        continue
-    end
-    pValues = numericArray(unitTable.p_AI, row);
-    mask(row) = numel(pValues) >= 3 && isfinite(pValues(2)) && ...
-        isfinite(pValues(3)) && pValues(2) < alpha && pValues(3) < alpha;
+    mask(row) = monkey == "Both" || strcmpi(monkeyName, monkey);
 end
 end
 

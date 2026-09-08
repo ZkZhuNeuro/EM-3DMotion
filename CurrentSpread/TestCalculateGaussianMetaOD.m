@@ -30,7 +30,8 @@ counts = ones(4, 4);
 
 actual = calculateGaussianMetaOD(raw, counts, "Correlation");
 
-verifyEqual(testCase, actual, [2 -2], 'AbsTol', 1e-12);
+expected = 2 .* atanh(1 - eps);
+verifyEqual(testCase, actual, [expected -expected], 'AbsTol', 1e-10);
 end
 
 
@@ -43,7 +44,8 @@ counts = ones(4, 5);
 
 actual = calculateGaussianMetaOD(raw, counts, "Correlation");
 
-verifyEqual(testCase, actual, 2, 'AbsTol', 1e-12);
+expected = 2 .* atanh(1 - eps);
+verifyEqual(testCase, actual, expected, 'AbsTol', 1e-10);
 end
 
 

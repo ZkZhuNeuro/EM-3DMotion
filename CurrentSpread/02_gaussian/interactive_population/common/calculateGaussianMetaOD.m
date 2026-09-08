@@ -73,7 +73,9 @@ for sigmaIndex = 1:numSigmas
     rightR = pearsonR(combined, right);
     if odDefinition == "Correlation"
         if isfinite(leftR) && isfinite(rightR)
-            metaOD(sigmaIndex) = leftR - rightR;
+            leftR = max(-1 + eps, min(1 - eps, leftR));
+            rightR = max(-1 + eps, min(1 - eps, rightR));
+            metaOD(sigmaIndex) = atanh(leftR) - atanh(rightR);
         end
         continue
     end
@@ -94,8 +96,8 @@ for sigmaIndex = 1:numSigmas
     partialRight = (rightR - leftR .* leftRightR) ./ rightDenominator;
     partialLeft = max(-1 + eps, min(1 - eps, partialLeft));
     partialRight = max(-1 + eps, min(1 - eps, partialRight));
-    zLeft = atanh(partialLeft) .* sqrt(n - 3);
-    zRight = atanh(partialRight) .* sqrt(n - 3);
+    zLeft = atanh(partialLeft);
+    zRight = atanh(partialRight);
     if isfinite(zLeft) && isfinite(zRight)
         metaOD(sigmaIndex) = zLeft - zRight;
     end

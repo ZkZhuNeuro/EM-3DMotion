@@ -8,6 +8,21 @@ if ~exist('generateCoronalPlots', 'var'), generateCoronalPlots = true; end
 if ~exist('generateSagittalPlots', 'var'), generateSagittalPlots = true; end
 if ~exist('jimSessionWorkbookRows', 'var'), jimSessionWorkbookRows = []; end
 if ~exist('jimCoronalAreas', 'var'), jimCoronalAreas = ["MT", "FST"]; end
+if ~exist('jimCoronalTargetAPVoxels', 'var'), jimCoronalTargetAPVoxels = []; end
+if ~exist('jimCoronalOutputDir', 'var'), jimCoronalOutputDir = ''; end
+if ~exist('jimCoronalDotColors', 'var'), jimCoronalDotColors = [0 1 0; 0 1 0]; end
+if ~exist('jimCoronalDotSize', 'var'), jimCoronalDotSize = 20; end
+if ~exist('jimCoronalFourROIsOnly', 'var'), jimCoronalFourROIsOnly = false; end
+if ~exist('jimCoronalVectorROIs', 'var'), jimCoronalVectorROIs = false; end
+if ~exist('jimCoronalExportPDF', 'var'), jimCoronalExportPDF = false; end
+if ~exist('jimCoronalCombinedPDF', 'var'), jimCoronalCombinedPDF = ''; end
+if ~exist('jimCoronalFilenameSuffix', 'var'), jimCoronalFilenameSuffix = ''; end
+if ~exist('jimCoronalExportDimensionsPoints', 'var')
+    jimCoronalExportDimensionsPoints = [];
+end
+if ~exist('jimCoronalRasterDimensionsPixels', 'var')
+    jimCoronalRasterDimensionsPixels = [];
+end
 if ~exist('jimSagittalTargetMLVoxels', 'var'), jimSagittalTargetMLVoxels = []; end
 if ~exist('jimSagittalCropPadding', 'var'), jimSagittalCropPadding = [12, 18]; end
 if ~exist('jimSagittalCropSpan', 'var'), jimSagittalCropSpan = []; end
@@ -23,7 +38,11 @@ if ~exist('jimSagittalRasterDimensionsPixels', 'var')
 end
 
 output_root = 'C:\EM\RecordingLocationPlots\Jim';
-coronal_dir = fullfile(output_root, 'ProjectedByY');
+if strlength(string(jimCoronalOutputDir)) == 0
+    coronal_dir = fullfile(output_root, 'ProjectedByY');
+else
+    coronal_dir = char(string(jimCoronalOutputDir));
+end
 sagittal_dir = fullfile(output_root, 'ProjectedSagittal');
 workbook_path = 'P:\Jim\NeuroData\RecordingRecord_Stimulation_final.xlsx';
 script_dir = fileparts(mfilename('fullpath'));
@@ -175,6 +194,20 @@ if generateCoronalPlots
         error('jimCoronalAreas must contain MT, FST, or both.');
     end
     coronal_areas = unique(coronal_areas, 'stable');
+    if ~isempty(jimCoronalTargetAPVoxels)
+        assert(numel(jimCoronalTargetAPVoxels) == numel(coronal_areas), ...
+            'jimCoronalTargetAPVoxels must provide one AP voxel per requested area.');
+        jimCoronalTargetAPVoxels = round(jimCoronalTargetAPVoxels(:).');
+    end
+    assert(isequal(size(jimCoronalDotColors), [2, 3]), ...
+        'jimCoronalDotColors must be a 2-by-3 [MT; FST] RGB matrix.');
+    if jimCoronalFourROIsOnly
+        coronal_roi_intensity = ROI_intensity(1:4);
+        coronal_color_mat = color_mat(1:4, :);
+    else
+        coronal_roi_intensity = ROI_intensity;
+        coronal_color_mat = color_mat;
+    end
     rounded_ap_voxels = round(ap_voxels);
     occupied_ap_voxels = unique(rounded_ap_voxels);
     all_ap_voxels = min(occupied_ap_voxels):max(occupied_ap_voxels);
@@ -184,6 +217,10 @@ if generateCoronalPlots
     generated_coronal_files = strings(numel(all_ap_voxels) * numel(coronal_areas), 1);
     generated_count = 0;
     for ap_voxel = all_ap_voxels
+        if ~isempty(jimCoronalTargetAPVoxels) && ...
+                ~any(jimCoronalTargetAPVoxels == ap_voxel)
+            continue;
+        end
         [image_slice, roi_slice] = prepareCoronalSliceLocal( ...
             struct_nii.img, roi_nii.img, ap_voxel, true);
         [brain_rows, brain_cols] = find(image_slice ~= 255);
@@ -204,14 +241,27 @@ if generateCoronalPlots
             filename_context = sprintf('HiddenBetweenAP%03d-%03d', lower_ap, upper_ap);
         end
 
-        for area = coronal_areas
+        for area_idx = 1:numel(coronal_areas)
+            area = coronal_areas(area_idx);
+            if ~isempty(jimCoronalTargetAPVoxels) && ...
+                    ap_voxel ~= jimCoronalTargetAPVoxels(area_idx)
+                continue;
+            end
             area_mask = included_roi == area;
             fig = figure('Color', 'w', 'Visible', 'off', 'Position', [100, 100, 1000, 800]);
             imshow(image_slice, 'InitialMagnification', 1000);
             hold on;
-            overlayROIsLocal(image_slice, roi_slice, ROI_intensity, color_mat, 1000);
-            scatter(coronal_display_ml(area_mask), depth_voxels(area_mask), 20, ...
-                [0 1 0], 'filled', 'MarkerEdgeColor', 'k', 'LineWidth', 0.75);
+            if jimCoronalVectorROIs
+                overlayROIsVectorLocal(roi_slice, ...
+                    coronal_roi_intensity, coronal_color_mat);
+            else
+                overlayROIsLocal(image_slice, roi_slice, ...
+                    coronal_roi_intensity, coronal_color_mat, 1000);
+            end
+            color_idx = find(areas == area, 1, 'first');
+            scatter(coronal_display_ml(area_mask), depth_voxels(area_mask), ...
+                jimCoronalDotSize, jimCoronalDotColors(color_idx, :), 'filled', ...
+                'MarkerEdgeColor', 'k', 'LineWidth', 0.75);
             legend('off');
             xlim([min(brain_cols), 256 / 2]);
             ylim([min(brain_rows), max(brain_rows)]);
@@ -220,23 +270,53 @@ if generateCoronalPlots
                 sprintf('%s | all %d included locations', slice_context, nnz(area_mask))}, ...
                 'FontSize', 8, 'Interpreter', 'none');
             hold off;
-            output_name = sprintf('Jim_%s_APVoxel%03d_%s_ProjectedLocations.png', ...
-                area, ap_voxel, filename_context);
+            output_name = sprintf('Jim_%s_APVoxel%03d_%s_ProjectedLocations%s.png', ...
+                area, ap_voxel, filename_context, ...
+                char(string(jimCoronalFilenameSuffix)));
             output_file = fullfile(coronal_dir, output_name);
-            exportgraphics(fig, output_file, 'Resolution', 300);
+            export_options = sagittalExportOptionsLocal( ...
+                jimCoronalExportDimensionsPoints, false);
+            exportgraphics(fig, output_file, export_options{:});
+            if ~isempty(jimCoronalRasterDimensionsPixels)
+                normalizeRasterCanvasLocal(output_file, ...
+                    jimCoronalRasterDimensionsPixels);
+            end
+            if jimCoronalExportPDF
+                pdf_file = replace(output_file, '.png', '.pdf');
+                export_options = sagittalExportOptionsLocal( ...
+                    jimCoronalExportDimensionsPoints, true);
+                exportgraphics(fig, pdf_file, export_options{:});
+            end
+            if strlength(string(jimCoronalCombinedPDF)) > 0
+                combined_pdf = char(string(jimCoronalCombinedPDF));
+                combined_dir = fileparts(combined_pdf);
+                if ~exist(combined_dir, 'dir'), mkdir(combined_dir); end
+                export_options = sagittalExportOptionsLocal( ...
+                    jimCoronalExportDimensionsPoints, true);
+                exportgraphics(fig, combined_pdf, export_options{:}, ...
+                    'Append', generated_count > 0);
+            end
             close(fig);
             generated_count = generated_count + 1;
             generated_coronal_files(generated_count) = string(output_file);
         end
+        if isempty(jimCoronalTargetAPVoxels)
+            generated_areas = coronal_areas;
+        else
+            generated_areas = coronal_areas(jimCoronalTargetAPVoxels == ap_voxel);
+        end
         fprintf('Generated Jim %s coronal projection(s) for AP voxel %d.\n', ...
-            strjoin(cellstr(coronal_areas), ' and '), ap_voxel);
+            strjoin(cellstr(generated_areas), ' and '), ap_voxel);
     end
-    for area = coronal_areas
-        area_token = string(filesep) + "Jim_" + area + "_";
-        area_generated = generated_coronal_files(contains( ...
-            generated_coronal_files, area_token));
-        cleanupGeneratedFilesLocal(coronal_dir, ...
-            sprintf('Jim_%s_*_ProjectedLocations.png', area), area_generated);
+    if isempty(jimCoronalTargetAPVoxels)
+        for area = coronal_areas
+            area_token = string(filesep) + "Jim_" + area + "_";
+            area_generated = generated_coronal_files(contains( ...
+                generated_coronal_files, area_token));
+            cleanupGeneratedFilesLocal(coronal_dir, ...
+                sprintf('Jim_%s_*_ProjectedLocations%s.png', area, ...
+                char(string(jimCoronalFilenameSuffix))), area_generated);
+        end
     end
 end
 

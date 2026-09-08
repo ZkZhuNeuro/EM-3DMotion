@@ -7,6 +7,20 @@
 - `generate_clay_projected_sagittal.m` — generates combined MT/FST sagittal projections.
 - `regenerate_clay_unit_table_gof.m` — regenerates the complete Clay figure set.
 - `regenerate_clay_projections_unit_table_gof.m` — regenerates projections only.
+- `regenerate_clay_selected_coronal.m` — creates one MT and one FST coronal
+  projection in `C:\EM\RecordingLocationPlots\Clay\SelectedCoronal`. The MT
+  AP voxel 57 and FST AP voxel 66 sections maximize the corresponding ROI
+  mask area across the analysis-covered AP range.
+- `regenerate_clay_all_separated_coronal.m` — creates separate blue-MT and
+  green-FST projections for every consecutive coronal MRI section, including
+  hidden intermediate sections, in
+  `C:\EM\RecordingLocationPlots\Clay\SeparatedCoronal`.
+- `regenerate_clay_cropped_coronal_pair.m` — creates the title-free cropped
+  MT AP voxel 56 and FST AP voxel 62 PDF/PNG pair in
+  `C:\EM\RecordingLocationPlots\Clay\CroppedCoronal`.
+- `regenerate_clay_session_20240926.m` — regenerates the single-session
+  coronal view for the workbook-labeled MT session on 2024-09-26 in
+  `C:\EM\RecordingLocationPlots\Clay\SingleSessions`.
 - `audit_clay_analysis_sessions.m` — audits the analysis session selection.
 
 Run the complete workflow from MATLAB with:

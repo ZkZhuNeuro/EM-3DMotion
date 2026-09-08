@@ -1,8 +1,9 @@
 function [rowIndices, audit] = getWorkbookRowsFromUnitTableGof(tb, monkeyName)
-% Match workbook rows to the analysis sessions in unit_table_gof.
+% Match workbook rows to the sessions included by unit_table_gof.
 % Exact Date-ROI matches are preferred. If a workbook ROI label was edited
-% after unit_table_gof was built, an otherwise unique date match is used and
-% the analysis ROI from unit_table_gof remains authoritative.
+% after unit_table_gof was built, an otherwise unique date match is used.
+% Downstream plotting must use audit.WorkbookROI for MT/FST labels;
+% audit.AnalysisROI is retained only to audit unit_table_gof disagreements.
 
 gofPath = 'C:\EM\BehaviorFitting\unit_table_gof.mat';
 loaded = load(gofPath, 'unit_table_gof');
@@ -61,6 +62,9 @@ audit.AnalysisROI = analysisROI;
 audit.AnalysisDates = analysisDates;
 audit.WorkbookROI = workbookROI(rowIndices);
 audit.UsedDateOnlyFallback = usedDateOnlyFallback;
+audit.WorkbookMTCount = nnz(audit.WorkbookROI == "MT");
+audit.WorkbookFSTCount = nnz(audit.WorkbookROI == "FST");
+audit.LabelMismatch = audit.AnalysisROI ~= audit.WorkbookROI;
 end
 
 function column = getTableColumnLocal(tb, requested_name)

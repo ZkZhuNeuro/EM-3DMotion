@@ -1,4 +1,4 @@
-%% Unified correlation-OD Gaussian-meta population app
+%% Unified correlation-OD Gaussian channel-prediction and legacy meta app
 
 clear; close all
 scriptFolder = fileparts(mfilename('fullpath'));

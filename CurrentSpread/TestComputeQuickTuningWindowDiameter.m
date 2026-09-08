@@ -50,6 +50,29 @@ removeTestFolder(root);
 end
 
 
+function testDeadNonstimContactCanBeSkipped(testCase)
+root = string(tempname);
+mkdir(root);
+cleanup = onCleanup(@() removeTestFolder(root));
+unitTable = makeUnitTableAndCache(root, 2);
+
+audit = ComputeQuickTuningWindowDiameter(unitTable, ...
+    JimCacheFolder=root, ClayCacheFolder=root, ChannelMap=1:9, ...
+    RelativePositions=-4:4, CandidateMask=true, NumSplits=20, ...
+    AllowDeadChannels=true);
+
+verifyEqual(testCase, audit.Status, "Success");
+verifyEqual(testCase, audit.LiveContactCount, 8);
+verifyEqual(testCase, audit.DeadContactCount, 1);
+verifyEqual(testCase, audit.EvaluatedPairCount, 28);
+verifyFalse(testCase, ismember(-3, audit.WindowRelativePositions{1}));
+verifyFalse(testCase, any(audit.PairRelativePositions{1} == -3, 'all'));
+
+clear cleanup
+removeTestFolder(root);
+end
+
+
 function unitTable = makeUnitTableAndCache(folder, deadChannel)
 coherence = [-22 -14 -10 -8 8 10 14 22] ./ 22;
 trialCount = 10;

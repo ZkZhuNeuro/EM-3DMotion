@@ -63,16 +63,16 @@ for i = 1:n_recordings
     offsets_mm(i, :) = parseNumericVectorLocal(getValueAtRowLocal(offset_column, row_idx));
     guide_mm(i) = parseScalarDoubleLocal(getValueAtRowLocal(guide_column, row_idx));
     depth_mm(i) = parseScalarDoubleLocal(getValueAtRowLocal(depth_column, row_idx));
-    included_roi(i) = inclusion_audit.AnalysisROI(i);
+    included_roi(i) = inclusion_audit.WorkbookROI(i);
 end
 
 if any(~isfinite(holes), 'all') || any(~isfinite(offsets_mm), 'all') || ...
         any(~isfinite(guide_mm)) || any(~isfinite(depth_mm))
     error('One or more included rows have invalid hole, offset, guide, or depth values.');
 end
-if nnz(included_roi == "MT") ~= inclusion_audit.MTCount || ...
-        nnz(included_roi == "FST") ~= inclusion_audit.FSTCount
-    error('Clay ROI counts do not match unit_table_gof: found %d MT and %d FST.', ...
+if nnz(included_roi == "MT") ~= inclusion_audit.WorkbookMTCount || ...
+        nnz(included_roi == "FST") ~= inclusion_audit.WorkbookFSTCount
+    error('Clay ROI counts do not match the workbook: found %d MT and %d FST.', ...
         nnz(included_roi == "MT"), nnz(included_roi == "FST"));
 end
 
